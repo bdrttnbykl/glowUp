@@ -71,6 +71,13 @@ import {
 } from '@/app/_home/utils'
 import { supabase } from '@/lib/supabase'
 
+type NormalizedAppointmentProductSale = {
+  id: number | null
+  product: string
+  price: string
+  quantity: number
+}
+
 const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date()) => {
   const periodStart = new Date(referenceDate)
   periodStart.setHours(0, 0, 0, 0)
@@ -1105,7 +1112,7 @@ export default function Home() {
         product.item_type === 'Urun' &&
         product.transaction_type === 'Satis'
     )
-    const normalizedProductSales = []
+    const normalizedProductSales: NormalizedAppointmentProductSale[] = []
 
     if (appointmentClosingDraft.attendanceStatus !== 'Gelmedi') {
       for (const item of appointmentClosingDraft.productSales) {
