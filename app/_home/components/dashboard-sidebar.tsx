@@ -24,7 +24,7 @@ export function DashboardSidebar({
   onToggleReportMenu,
 }: DashboardSidebarProps) {
   return (
-    <aside className="group fixed left-0 top-0 z-30 hidden h-screen w-[74px] flex-col justify-between overflow-hidden bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px] lg:flex">
+    <aside className="group fixed left-0 top-0 z-30 hidden h-screen w-[74px] flex-col overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px] lg:flex">
       <div className="relative min-h-0 flex-1 px-3 py-5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
 
@@ -40,7 +40,7 @@ export function DashboardSidebar({
             </div>
           </div>
 
-          <nav className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
+          <nav className="flex min-h-0 w-full flex-1 flex-col gap-4 pr-1">
             {sidebarItems.map((item) => {
               const active = item.label === activeSection
               const isReportsItem = item.label === 'Raporlar'
@@ -137,7 +137,7 @@ export function DashboardSidebar({
         </div>
       </div>
 
-      <div className="border-t border-white/10 bg-black/35 px-2 py-4 backdrop-blur-sm">
+      <div className="sticky bottom-0 border-t border-white/10 bg-black/35 px-2 py-4 backdrop-blur-sm">
         <div className="flex items-center justify-center gap-3 overflow-hidden group-hover:justify-start">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#62b0ff] text-sm font-semibold text-slate-950">
             10
