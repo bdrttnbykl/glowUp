@@ -256,7 +256,7 @@ export default function Home() {
   const [calendarStaffFilter, setCalendarStaffFilter] = useState('Tum personeller')
   const [cashReportPeriod, setCashReportPeriod] = useState<CashReportPeriod>('Bu ay')
   const [salesReportTarget, setSalesReportTarget] = useState('100000')
-  const [isReportMenuOpen, setIsReportMenuOpen] = useState(true)
+  const [isReportMenuOpen, setIsReportMenuOpen] = useState(false)
   const [openCashReportSections, setOpenCashReportSections] = useState<string[]>([
     'total',
     'income',
@@ -334,6 +334,9 @@ export default function Home() {
 
   const handleSectionChange = (section: string) => {
     setActiveSection(section)
+    if (section !== 'Raporlar') {
+      setIsReportMenuOpen(false)
+    }
     setMessage(
       section === 'Ozet' ||
         section === 'Randevular' ||
@@ -353,6 +356,7 @@ export default function Home() {
 
   const handleReportSectionChange = (section: string) => {
     setActiveSection(section)
+    setIsReportMenuOpen(true)
     setMessage(
       section === 'Kasa raporu' || section === 'Personel raporu'
         || section === 'Satis raporlari'
