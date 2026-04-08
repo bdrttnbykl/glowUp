@@ -9,7 +9,22 @@ import {
   DashboardSectionCard,
 } from '@/app/_home/components/dashboard-page-shell'
 import type { Appointment, AppointmentRow } from '@/app/_home/types'
-import { downloadPdfFile, isPastAppointment } from '@/app/_home/utils'
+import {
+  createDateFromIso,
+  downloadPdfFile,
+  formatAppointmentOutcomeLabel,
+  formatDateIso,
+  getTodayDateInputValue,
+  isPastAppointment,
+} from '@/app/_home/utils'
+
+type AppointmentPeriodFilter =
+  | 'Tum zamanlar'
+  | 'Bugun'
+  | 'Bu hafta'
+  | 'Bu ay'
+  | 'Bu yil'
+  | 'Ozel aralik'
 
 type AppointmentsPageProps = {
   appointmentRows: AppointmentRow[]
@@ -33,9 +48,68 @@ export function AppointmentsPage({
   const [visibilityFilter, setVisibilityFilter] = useState<'Acik' | 'Sonuclanan' | 'Hepsi'>(
     'Acik'
   )
-  const openCount = appointmentRows.filter((item) => !item.closed_at).length
-  const closedCount = appointmentRows.filter((item) => !!item.closed_at).length
-  const filteredAppointments = appointmentRows.filter((item) => {
+  const [periodFilter, setPeriodFilter] = useState<AppointmentPeriodFilter>('Tum zamanlar')
+  const [isPeriodPreviewOpen, setIsPeriodPreviewOpen] = useState(false)
+  const todayIso = getTodayDateInputValue()
+  const [customRangeStart, setCustomRangeStart] = useState(todayIso)
+  const [customRangeEnd, setCustomRangeEnd] = useState(todayIso)
+
+  const getSelectedRange = () => {
+    if (periodFilter === 'Tum zamanlar') {
+      return null
+    }
+
+    if (periodFilter === 'Ozel aralik') {
+      if (!customRangeStart || !customRangeEnd) {
+        return null
+      }
+
+      const start =
+        customRangeStart <= customRangeEnd ? customRangeStart : customRangeEnd
+      const end = customRangeStart <= customRangeEnd ? customRangeEnd : customRangeStart
+
+      return { start, end }
+    }
+
+    const today = createDateFromIso(todayIso)
+    const rangeStart = new Date(today)
+
+    if (periodFilter === 'Bu hafta') {
+      const day = rangeStart.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      rangeStart.setDate(rangeStart.getDate() + diff)
+    } else if (periodFilter === 'Bu ay') {
+      rangeStart.setDate(1)
+    } else if (periodFilter === 'Bu yil') {
+      rangeStart.setMonth(0, 1)
+    }
+
+    return {
+      start: periodFilter === 'Bugun' ? todayIso : formatDateIso(rangeStart),
+      end: todayIso,
+    }
+  }
+
+  const selectedRange = getSelectedRange()
+  const appointmentsInPeriod = appointmentRows.filter((item) => {
+    if (!selectedRange) {
+      return true
+    }
+
+    if (!item.date) {
+      return false
+    }
+
+    return item.date >= selectedRange.start && item.date <= selectedRange.end
+  })
+  const appointmentsInPeriodPreview = [...appointmentsInPeriod].sort((left, right) => {
+    const leftKey = `${left.date || ''} ${left.time || '99:99'}`
+    const rightKey = `${right.date || ''} ${right.time || '99:99'}`
+    return leftKey.localeCompare(rightKey, 'tr')
+  })
+  const openCount = appointmentsInPeriod.filter((item) => !item.closed_at).length
+  const closedCount = appointmentsInPeriod.filter((item) => !!item.closed_at).length
+  const filteredAppointments = appointmentsInPeriod.filter((item) => {
     if (visibilityFilter === 'Acik') {
       return !item.closed_at
     }
@@ -46,6 +120,13 @@ export function AppointmentsPage({
 
     return true
   })
+  const formatShortDate = (isoDate: string) =>
+    createDateFromIso(isoDate).toLocaleDateString('tr-TR')
+  const rangeSummary = selectedRange
+    ? selectedRange.start === selectedRange.end
+      ? formatShortDate(selectedRange.start)
+      : `${formatShortDate(selectedRange.start)} - ${formatShortDate(selectedRange.end)}`
+    : 'Tum kayitlar'
 
   const handleDownload = () => {
     const rows = [
@@ -73,7 +154,7 @@ export function AppointmentsPage({
         item.date || '',
         item.time || '',
         item.status || 'Taslak',
-        item.attendance_status || '',
+        formatAppointmentOutcomeLabel(item.attendance_status, item.service_status),
         item.payment_method || '',
         item.collected_amount || '',
         item.total_price || '',
@@ -95,12 +176,12 @@ export function AppointmentsPage({
     <DashboardPageShell>
       <DashboardPageHero
         title={`Randevular (${filteredAppointments.length})`}
-        description="Gunun operasyonunu buradan takip et. Acik, sonuclanmis veya tum randevulari tek akista gorebilir ve hizli aksiyon alabilirsin."
+        description="Gunun operasyonunu buradan takip et. Acik, sonuclanmis veya tum randevulari secilen donem icinde tek akista gorebilir ve hizli aksiyon alabilirsin."
         stats={
           <>
             <DashboardMetric label="Acik" value={`${openCount}`} tone="emerald" />
             <DashboardMetric label="Sonuclanan" value={`${closedCount}`} tone="amber" />
-            <DashboardMetric label="Toplam" value={`${appointmentRows.length}`} />
+            <DashboardMetric label="Toplam" value={`${appointmentsInPeriod.length}`} />
           </>
         }
       />
@@ -129,10 +210,19 @@ export function AppointmentsPage({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#537bb4]">
                 Donem
               </p>
-              <select className="min-w-[220px] rounded-2xl border border-[#c8d6e8] bg-[#f8fbff] px-4 py-3 text-base text-slate-700 outline-none">
-                <option>Bu yil</option>
-                <option>Bu ay</option>
+              <select
+                value={periodFilter}
+                onChange={(event) =>
+                  setPeriodFilter(event.target.value as AppointmentPeriodFilter)
+                }
+                className="min-w-[220px] rounded-2xl border border-[#c8d6e8] bg-[#f8fbff] px-4 py-3 text-base text-slate-700 outline-none"
+              >
+                <option>Tum zamanlar</option>
+                <option>Bugun</option>
                 <option>Bu hafta</option>
+                <option>Bu ay</option>
+                <option>Bu yil</option>
+                <option>Ozel aralik</option>
               </select>
             </div>
           </div>
@@ -169,9 +259,88 @@ export function AppointmentsPage({
           </div>
         </div>
 
+        {periodFilter === 'Ozel aralik' ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:max-w-[520px]">
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#537bb4]">
+                Baslangic
+              </span>
+              <input
+                type="date"
+                value={customRangeStart}
+                onChange={(event) => setCustomRangeStart(event.target.value)}
+                className="w-full rounded-2xl border border-[#c8d6e8] bg-[#f8fbff] px-4 py-3 text-base text-slate-700 outline-none"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#537bb4]">
+                Bitis
+              </span>
+              <input
+                type="date"
+                value={customRangeEnd}
+                onChange={(event) => setCustomRangeEnd(event.target.value)}
+                className="w-full rounded-2xl border border-[#c8d6e8] bg-[#f8fbff] px-4 py-3 text-base text-slate-700 outline-none"
+              />
+            </label>
+          </div>
+        ) : null}
+
         <div className="mt-4 rounded-2xl border border-[#d9e2ef] bg-[#f8fbff] px-5 py-4 text-sm leading-6 text-slate-600">
           Randevu sonucunu kaydetmek veya guncellemek icin `Sonuclandir` kullan. Paket
-          randevularinda seans dusumu sadece `Geldi` secildiginde yapilir.
+          randevularinda seans dusumu sadece `Geldi` secildiginde yapilir. Secili donem:
+          {` ${rangeSummary}`}.
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              Acik
+            </div>
+            <div className="mt-2 text-3xl font-semibold text-emerald-900">{openCount}</div>
+            <div className="mt-1 text-sm text-emerald-800">Secili araliktaki acik randevular</div>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+              Sonuclanan
+            </div>
+            <div className="mt-2 text-3xl font-semibold text-amber-900">{closedCount}</div>
+            <div className="mt-1 text-sm text-amber-800">
+              Secili aralikta tamamlanan randevular
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[#d9e2ef] bg-white px-5 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#537bb4]">
+              Gosterilen Sonuc
+            </div>
+            <div className="mt-2 text-3xl font-semibold text-slate-900">
+              {filteredAppointments.length}
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              {visibilityFilter} gorunumunde listelenen kayitlar
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#d9e2ef] bg-white p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#537bb4]">
+              Secili Donem Detayi
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              Secili tarih araligindaki tum randevulari popup icinde yatay akista gorebilirsin.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPeriodPreviewOpen(true)}
+            disabled={appointmentsInPeriodPreview.length === 0}
+            className="rounded-2xl border border-[#c8d6e8] bg-[#f8fbff] px-5 py-3 text-sm font-medium text-[#537bb4] disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+          >
+            {appointmentsInPeriodPreview.length === 0
+              ? 'Donemde randevu yok'
+              : `${appointmentsInPeriodPreview.length} randevuyu popupta gor`}
+          </button>
         </div>
       </DashboardSectionCard>
 
@@ -228,7 +397,9 @@ export function AppointmentsPage({
                       )}
                     </td>
                     <td className="px-4 py-5">{item.status || 'Taslak'}</td>
-                    <td className="px-4 py-5">{item.attendance_status || '-'}</td>
+                    <td className="px-4 py-5">
+                      {formatAppointmentOutcomeLabel(item.attendance_status, item.service_status)}
+                    </td>
                     <td className="px-4 py-5">
                       {item.payment_method || item.collected_amount
                         ? `${item.payment_method ? item.payment_method : ''}${item.collected_amount ? `${item.payment_method ? ' / ' : ''}${item.collected_amount}` : ''}`
@@ -274,6 +445,108 @@ export function AppointmentsPage({
           </table>
         </div>
       </DashboardSectionCard>
+
+      {isPeriodPreviewOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-8">
+          <div className="flex max-h-[88vh] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-[#d9e2ef] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.28)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[#d9e2ef] px-6 py-5">
+              <div>
+                <h3 className="text-2xl font-semibold text-slate-800">Secili donemdeki randevular</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {rangeSummary} araliginda bulunan tum kayitlar. Gorunum filtresi uygulanmaz.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPeriodPreviewOpen(false)}
+                className="rounded-2xl border border-slate-300 px-4 py-2 text-sm text-slate-500"
+              >
+                Kapat
+              </button>
+            </div>
+
+            <div className="border-b border-[#d9e2ef] bg-[#f8fbff] px-6 py-4 text-sm text-slate-600">
+              Toplam {appointmentsInPeriodPreview.length} kayit
+            </div>
+
+            <div className="overflow-x-auto overflow-y-auto px-6 py-6">
+              {appointmentsInPeriodPreview.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[#d9e2ef] bg-[#f8fbff] px-4 py-8 text-center text-sm text-slate-400">
+                  Secili tarih araliginda randevu yok.
+                </div>
+              ) : (
+                <div className="flex min-w-max gap-4">
+                  {appointmentsInPeriodPreview.map((item) => (
+                    <div
+                      key={`period-preview-${item.id}`}
+                      className="w-[320px] shrink-0 rounded-3xl border border-[#d9e2ef] bg-[#f8fbff] p-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-slate-800">{item.customer || '-'}</div>
+                          <div className="mt-1 text-sm text-slate-500">{item.service}</div>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            item.closed_at
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {item.closed_at ? 'Sonuclanan' : 'Acik'}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 space-y-2 text-sm text-slate-600">
+                        <div>
+                          {item.date ? formatShortDate(item.date) : '-'}
+                          {item.time ? ` / ${item.time}` : ''}
+                        </div>
+                        <div>{item.staff || 'Personel yok'}</div>
+                        <div>{item.phone || 'Telefon yok'}</div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full bg-white px-3 py-1 text-slate-500">
+                          {item.status || 'Taslak'}
+                        </span>
+                    <span className="rounded-full bg-white px-3 py-1 text-slate-500">
+                      {formatAppointmentOutcomeLabel(item.attendance_status, item.service_status)}
+                    </span>
+                      </div>
+
+                      <div className="mt-5 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPeriodPreviewOpen(false)
+                            onStartEditingNote(item)
+                          }}
+                          className="rounded-2xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-[#537bb4]"
+                        >
+                          Duzenle
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPeriodPreviewOpen(false)
+                            onOpenAppointmentClosingModal(item)
+                          }}
+                          className={`rounded-2xl px-4 py-3 text-sm font-medium text-white ${
+                            item.closed_at ? 'bg-amber-600' : 'bg-rose-600'
+                          }`}
+                        >
+                          {item.closed_at ? 'Sonucu duzenle' : 'Sonuclandir'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <DashboardMessage message={message} />
     </DashboardPageShell>

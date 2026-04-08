@@ -12,6 +12,7 @@ export type Appointment = {
   total_price: string | null
   creator: string | null
   attendance_status: string | null
+  service_status: string | null
   payment_method: string | null
   collected_amount: string | null
   closed_at: string | null
@@ -103,6 +104,7 @@ export type PackageSessionDraft = {
 
 export type AppointmentClosingDraft = {
   attendanceStatus: string
+  serviceStatus: string
   paymentMethod: string
   collectedAmount: string
   productSales: AppointmentClosingProductDraft[]

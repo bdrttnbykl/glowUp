@@ -152,6 +152,53 @@ export const formatCurrencyValue = (value: number) => {
   })} TL`
 }
 
+export const normalizeAppointmentServiceStatus = (
+  attendanceStatus: string | null,
+  serviceStatus: string | null
+) => {
+  if (attendanceStatus !== 'Geldi') {
+    return 'Yapilmadi'
+  }
+
+  return serviceStatus === 'Yapilmadi' ? 'Yapilmadi' : 'Yapildi'
+}
+
+export const isCompletedAppointmentService = (
+  attendanceStatus: string | null,
+  serviceStatus: string | null
+) => {
+  return (
+    attendanceStatus === 'Geldi' &&
+    normalizeAppointmentServiceStatus(attendanceStatus, serviceStatus) === 'Yapildi'
+  )
+}
+
+export const shouldConsumeAppointmentPackageSession = (
+  attendanceStatus: string | null,
+  serviceStatus: string | null
+) => {
+  if (attendanceStatus === 'Gelmedi') {
+    return true
+  }
+
+  return isCompletedAppointmentService(attendanceStatus, serviceStatus)
+}
+
+export const formatAppointmentOutcomeLabel = (
+  attendanceStatus: string | null,
+  serviceStatus: string | null
+) => {
+  if (!attendanceStatus) {
+    return '-'
+  }
+
+  if (attendanceStatus !== 'Geldi') {
+    return attendanceStatus
+  }
+
+  return `${attendanceStatus} / ${normalizeAppointmentServiceStatus(attendanceStatus, serviceStatus)}`
+}
+
 type DownloadPdfOptions = {
   filename: string
   orientation?: 'landscape' | 'portrait'

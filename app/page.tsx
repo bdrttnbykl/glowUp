@@ -66,8 +66,11 @@ import {
   getTimeSlotIndex,
   getTodayDateInputValue,
   getWeekDates,
+  isCompletedAppointmentService,
   isDateWithinReportPeriod,
   parseCurrencyValue,
+  shouldConsumeAppointmentPackageSession,
+  normalizeAppointmentServiceStatus,
 } from '@/app/_home/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -469,8 +472,9 @@ export default function Home() {
     setClosingAppointmentId(item.id)
     setAppointmentClosingDraft({
       attendanceStatus: item.attendance_status || 'Geldi',
-      paymentMethod: item.payment_method || 'Nakit',
-      collectedAmount: item.collected_amount || item.total_price || '',
+      serviceStatus: normalizeAppointmentServiceStatus(item.attendance_status, item.service_status),
+      paymentMethod: item.package_sale_id ? '' : item.payment_method || 'Nakit',
+      collectedAmount: item.package_sale_id ? '' : item.collected_amount || item.total_price || '',
       productSales: linkedProductSales.map((product) => ({
         id: product.id,
         product: product.product,
@@ -1114,7 +1118,7 @@ export default function Home() {
     )
     const normalizedProductSales: NormalizedAppointmentProductSale[] = []
 
-    if (appointmentClosingDraft.attendanceStatus !== 'Gelmedi') {
+    if (appointmentClosingDraft.attendanceStatus === 'Geldi') {
       for (const item of appointmentClosingDraft.productSales) {
         const productLabel = item.product.trim()
         const price = item.price.trim()
@@ -1181,7 +1185,7 @@ export default function Home() {
       ...desiredQuantityByProduct,
     }).reduce<Record<string, number>>((result, key) => {
       const desiredQuantity =
-        appointmentClosingDraft.attendanceStatus === 'Gelmedi' ? 0 : desiredQuantityByProduct[key] || 0
+        appointmentClosingDraft.attendanceStatus === 'Geldi' ? desiredQuantityByProduct[key] || 0 : 0
       const existingQuantity = existingQuantityByProduct[key] || 0
       result[key] = desiredQuantity - existingQuantity
       return result
@@ -1205,18 +1209,35 @@ export default function Home() {
       }
     }
 
+    const normalizedServiceStatus =
+      appointmentClosingDraft.attendanceStatus === 'Geldi'
+        ? normalizeAppointmentServiceStatus(
+            appointmentClosingDraft.attendanceStatus,
+            appointmentClosingDraft.serviceStatus
+          )
+        : 'Yapilmadi'
+    const isPackageSessionAppointment = !!appointment?.package_sale_id
     const paymentMethod =
-      appointmentClosingDraft.attendanceStatus === 'Gelmedi'
-        ? null
-        : appointmentClosingDraft.paymentMethod
+      appointmentClosingDraft.attendanceStatus === 'Geldi' && !isPackageSessionAppointment
+        ? appointmentClosingDraft.paymentMethod
+        : null
     const collectedAmount =
-      appointmentClosingDraft.attendanceStatus === 'Gelmedi'
-        ? null
-        : appointmentClosingDraft.collectedAmount.trim() || null
+      appointmentClosingDraft.attendanceStatus === 'Geldi' && !isPackageSessionAppointment
+        ? appointmentClosingDraft.collectedAmount.trim() || null
+        : null
     const shouldConsumePackageSession =
-      appointmentClosingDraft.attendanceStatus === 'Geldi' &&
       !!appointment?.package_sale_id &&
-      !appointment.package_session_consumed_at
+      shouldConsumeAppointmentPackageSession(
+        appointmentClosingDraft.attendanceStatus,
+        normalizedServiceStatus
+      )
+    const hadConsumedPackageSession = !!appointment?.package_session_consumed_at
+    const packageSessionConsumedAt =
+      shouldConsumePackageSession && !hadConsumedPackageSession
+        ? new Date().toISOString()
+        : shouldConsumePackageSession
+          ? appointment?.package_session_consumed_at || new Date().toISOString()
+          : null
 
     setLoading(true)
     setMessage('')
@@ -1225,30 +1246,35 @@ export default function Home() {
       .from('appointments')
       .update({
         attendance_status: appointmentClosingDraft.attendanceStatus,
+        service_status: normalizedServiceStatus,
         payment_method: paymentMethod,
         collected_amount: collectedAmount,
         closed_at: new Date().toISOString(),
-        package_session_consumed_at: shouldConsumePackageSession
-          ? new Date().toISOString()
-          : appointment?.package_session_consumed_at || null,
+        package_session_consumed_at: packageSessionConsumedAt,
       })
       .eq('id', closingAppointmentId)
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(error.message)
+      setMessage(
+        error.message.includes('service_status')
+          ? 'Appointments service status migrationini calistir.'
+          : error.message
+      )
       setLoading(false)
       return
     }
 
-    if (shouldConsumePackageSession && appointment?.package_sale_id) {
+    if (appointment?.package_sale_id && shouldConsumePackageSession !== hadConsumedPackageSession) {
       const packageSale = packageSales.find((item) => item.id === appointment.package_sale_id)
 
       if (packageSale) {
         const { error: packageError } = await supabase
           .from('package_sales')
           .update({
-            used_sessions: Math.min(packageSale.total_sessions, packageSale.used_sessions + 1),
+            used_sessions: shouldConsumePackageSession
+              ? Math.min(packageSale.total_sessions, packageSale.used_sessions + 1)
+              : Math.max(packageSale.used_sessions - 1, 0),
           })
           .eq('id', packageSale.id)
           .eq('user_id', userId)
@@ -1261,7 +1287,7 @@ export default function Home() {
       }
     }
 
-    if (appointmentClosingDraft.attendanceStatus !== 'Gelmedi') {
+    if (appointmentClosingDraft.attendanceStatus === 'Geldi') {
       for (const item of normalizedProductSales) {
         const sourceProduct = inventoryProductsByName[item.product.toLocaleLowerCase('tr-TR')]
 
@@ -1553,7 +1579,7 @@ export default function Home() {
     const closedAppointmentsForReport = appointmentRows.filter(
       (item) =>
         !!item.closed_at &&
-        item.attendance_status !== 'Gelmedi' &&
+        isCompletedAppointmentService(item.attendance_status, item.service_status) &&
         isDateWithinReportPeriod(item.closed_at, cashReportPeriod)
     )
     const packageSalesForReport = packageSales.filter((item) =>
@@ -1570,7 +1596,7 @@ export default function Home() {
     const closedAppointmentsForPreviousPeriod = appointmentRows.filter(
       (item) =>
         !!item.closed_at &&
-        item.attendance_status !== 'Gelmedi' &&
+        isCompletedAppointmentService(item.attendance_status, item.service_status) &&
         isDateWithinReportPeriod(item.closed_at, cashReportPeriod, previousPeriodReference)
     )
     const packageSalesForPreviousPeriod = packageSales.filter((item) =>
@@ -1737,7 +1763,7 @@ export default function Home() {
         .filter(
           (item) =>
             !!item.closed_at &&
-            item.attendance_status !== 'Gelmedi' &&
+            isCompletedAppointmentService(item.attendance_status, item.service_status) &&
             isWithinPersonnelPeriod(item.closed_at)
         )
         .forEach((item) => {
@@ -2038,7 +2064,7 @@ export default function Home() {
         .filter(
           (item) =>
             !!item.closed_at &&
-            item.attendance_status !== 'Gelmedi' &&
+            isCompletedAppointmentService(item.attendance_status, item.service_status) &&
             parseCurrencyValue(item.collected_amount || item.total_price) > 0
         )
         .map((item) => ({
@@ -2607,6 +2633,9 @@ export default function Home() {
 
               <AppointmentClosingModal
                 draft={appointmentClosingDraft}
+                isPackageSession={
+                  !!appointments.find((item) => item.id === closingAppointmentId)?.package_sale_id
+                }
                 isOpen={isAppointmentClosingModalOpen}
                 loading={loading}
                 onClose={closeAppointmentClosingModal}

@@ -10,6 +10,7 @@ type AppointmentClosingModalProps = {
     value: string
   }>
   draft: AppointmentClosingDraft
+  isPackageSession: boolean
   isOpen: boolean
   loading: boolean
   onClose: () => void
@@ -20,6 +21,7 @@ type AppointmentClosingModalProps = {
 export function AppointmentClosingModal({
   productOptions,
   draft,
+  isPackageSession,
   isOpen,
   loading,
   onClose,
@@ -29,6 +31,12 @@ export function AppointmentClosingModal({
   if (!isOpen) {
     return null
   }
+
+  const paymentDisabled = draft.attendanceStatus !== 'Geldi'
+  const showPaymentFields = !isPackageSession
+  const willConsumePackageSession =
+    draft.attendanceStatus === 'Gelmedi' ||
+    (draft.attendanceStatus === 'Geldi' && draft.serviceStatus === 'Yapildi')
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-8">
@@ -49,41 +57,72 @@ export function AppointmentClosingModal({
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div
+          className={`mt-5 grid gap-3 ${
+            showPaymentFields ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-2'
+          }`}
+        >
           <select
             value={draft.attendanceStatus}
             onChange={(e) =>
               onDraftChange({
                 ...draft,
                 attendanceStatus: e.target.value,
-                paymentMethod: e.target.value === 'Gelmedi' ? '' : draft.paymentMethod,
-                collectedAmount: e.target.value === 'Gelmedi' ? '' : draft.collectedAmount,
+                serviceStatus: e.target.value === 'Geldi' ? draft.serviceStatus || 'Yapildi' : 'Yapilmadi',
+                paymentMethod: e.target.value === 'Geldi' ? draft.paymentMethod || 'Nakit' : '',
+                collectedAmount: e.target.value === 'Geldi' ? draft.collectedAmount : '',
               })
             }
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
           >
             <option>Geldi</option>
             <option>Gelmedi</option>
+            <option>Iptal</option>
+            <option>Ertelendi</option>
           </select>
           <select
-            disabled={draft.attendanceStatus === 'Gelmedi'}
-            value={draft.paymentMethod}
-            onChange={(e) => onDraftChange({ ...draft, paymentMethod: e.target.value })}
+            disabled={draft.attendanceStatus !== 'Geldi'}
+            value={draft.serviceStatus}
+            onChange={(e) => onDraftChange({ ...draft, serviceStatus: e.target.value })}
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
           >
-            <option>Nakit</option>
-            <option>Kredi karti</option>
-            <option>Havale</option>
-            <option>Diger</option>
+            <option>Yapildi</option>
+            <option>Yapilmadi</option>
           </select>
-          <input
-            disabled={draft.attendanceStatus === 'Gelmedi'}
-            value={draft.collectedAmount}
-            onChange={(e) => onDraftChange({ ...draft, collectedAmount: e.target.value })}
-            placeholder="Alinan odeme"
-            className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
-          />
+          {showPaymentFields ? (
+            <>
+              <select
+                disabled={paymentDisabled}
+                value={draft.paymentMethod}
+                onChange={(e) => onDraftChange({ ...draft, paymentMethod: e.target.value })}
+                className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                <option>Nakit</option>
+                <option>Kredi karti</option>
+                <option>Havale</option>
+                <option>Diger</option>
+              </select>
+              <input
+                disabled={paymentDisabled}
+                value={draft.collectedAmount}
+                onChange={(e) => onDraftChange({ ...draft, collectedAmount: e.target.value })}
+                placeholder="Alinan odeme"
+                className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+              />
+            </>
+          ) : null}
         </div>
+
+        {isPackageSession ? (
+          <div className="mt-4 rounded-2xl border border-[#d9e2ef] bg-[#f8fbff] px-4 py-4 text-sm text-slate-600">
+            Paket seansi kurali:
+            {` ${
+              willConsumePackageSession
+                ? 'Bu secimle seans dusecek.'
+                : 'Bu secimle seans dusmeyecek.'
+            }`}
+          </div>
+        ) : null}
 
         <div className="mt-5 rounded-2xl border border-[#d8e1ee] bg-[#f8fbff] p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -98,7 +137,7 @@ export function AppointmentClosingModal({
             </div>
             <button
               type="button"
-              disabled={draft.attendanceStatus === 'Gelmedi'}
+              disabled={draft.attendanceStatus !== 'Geldi'}
                 onClick={() =>
                   onDraftChange({
                     ...draft,
@@ -126,7 +165,7 @@ export function AppointmentClosingModal({
                   className="grid gap-3 md:grid-cols-[minmax(0,1.45fr)_110px_minmax(0,1fr)_96px]"
                 >
                   <select
-                    disabled={draft.attendanceStatus === 'Gelmedi'}
+                    disabled={draft.attendanceStatus !== 'Geldi'}
                     value={item.product}
                     onChange={(event) => {
                       const selectedOption = productOptions.find(
@@ -156,7 +195,7 @@ export function AppointmentClosingModal({
                     ))}
                   </select>
                   <input
-                    disabled={draft.attendanceStatus === 'Gelmedi'}
+                    disabled={draft.attendanceStatus !== 'Geldi'}
                     value={item.quantity}
                     onChange={(event) =>
                       onDraftChange({
@@ -172,7 +211,7 @@ export function AppointmentClosingModal({
                     className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
                   />
                   <input
-                    disabled={draft.attendanceStatus === 'Gelmedi'}
+                    disabled={draft.attendanceStatus !== 'Geldi'}
                     value={item.price}
                     onChange={(event) =>
                       onDraftChange({
@@ -189,7 +228,7 @@ export function AppointmentClosingModal({
                   />
                   <button
                     type="button"
-                    disabled={draft.attendanceStatus === 'Gelmedi'}
+                    disabled={draft.attendanceStatus !== 'Geldi'}
                     onClick={() =>
                       onDraftChange({
                         ...draft,

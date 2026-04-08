@@ -53,6 +53,7 @@ export const defaultPackageSessionDraft: PackageSessionDraft = {
 
 export const defaultAppointmentClosingDraft: AppointmentClosingDraft = {
   attendanceStatus: 'Geldi',
+  serviceStatus: 'Yapildi',
   paymentMethod: 'Nakit',
   collectedAmount: '',
   productSales: [],
