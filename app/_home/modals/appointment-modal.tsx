@@ -1,9 +1,10 @@
-import { serviceOptions, staffOptions } from '@/app/_home/constants'
+import { getStaffOptionsForService, serviceOptions } from '@/app/_home/constants'
 import type { AppointmentDraft } from '@/app/_home/types'
 import { getTodayDateInputValue, normalizePhoneInput } from '@/app/_home/utils'
 
 type AppointmentModalProps = {
   draft: AppointmentDraft
+  isEditing?: boolean
   isOpen: boolean
   loading: boolean
   onClose: () => void
@@ -13,6 +14,7 @@ type AppointmentModalProps = {
 
 export function AppointmentModal({
   draft,
+  isEditing = false,
   isOpen,
   loading,
   onClose,
@@ -23,14 +25,20 @@ export function AppointmentModal({
     return null
   }
 
+  const availableStaffOptions = getStaffOptionsForService(draft.service)
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-8">
       <div className="w-full max-w-4xl rounded-[20px] border border-slate-200 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.28)]">
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-800">Yeni randevu</h2>
+            <h2 className="text-2xl font-semibold text-slate-800">
+              {isEditing ? 'Randevuyu duzenle' : 'Yeni randevu'}
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Musteri ve hizmet bilgilerini girip randevu olustur.
+              {isEditing
+                ? 'Musteri, hizmet, personel ve zaman bilgilerini guncelle.'
+                : 'Musteri ve hizmet bilgilerini girip randevu olustur.'}
             </p>
           </div>
           <button
@@ -63,13 +71,16 @@ export function AppointmentModal({
           <select
             value={draft.service}
             onChange={(e) => {
+              const selectedServiceLabel = e.target.value
               const selectedService = serviceOptions.find(
-                (service) => service.label === e.target.value
+                (service) => service.label === selectedServiceLabel
               )
+              const matchingStaffOptions = getStaffOptionsForService(selectedServiceLabel)
 
               onDraftChange({
                 ...draft,
-                service: e.target.value,
+                service: selectedServiceLabel,
+                staff: matchingStaffOptions.includes(draft.staff) ? draft.staff : '',
                 totalPrice: selectedService?.price || '',
               })
             }}
@@ -85,10 +96,13 @@ export function AppointmentModal({
           <select
             value={draft.staff}
             onChange={(e) => onDraftChange({ ...draft, staff: e.target.value })}
+            disabled={!draft.service}
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
           >
-            <option value="">Hizmet veren sec</option>
-            {staffOptions.map((staff) => (
+            <option value="">
+              {draft.service ? 'Hizmet veren sec' : 'Once hizmet sec'}
+            </option>
+            {availableStaffOptions.map((staff) => (
               <option key={staff} value={staff}>
                 {staff}
               </option>
@@ -96,7 +110,7 @@ export function AppointmentModal({
           </select>
           <input
             type="date"
-            min={getTodayDateInputValue()}
+            min={isEditing ? undefined : getTodayDateInputValue()}
             value={draft.date}
             onChange={(e) => onDraftChange({ ...draft, date: e.target.value })}
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
@@ -146,7 +160,7 @@ export function AppointmentModal({
             disabled={loading}
             className="rounded-md bg-[#34b24a] px-6 py-3 font-medium text-white disabled:opacity-50"
           >
-            {loading ? 'Bekle...' : 'Randevu olustur'}
+            {loading ? 'Bekle...' : isEditing ? 'Degisiklikleri kaydet' : 'Randevu olustur'}
           </button>
         </div>
       </div>

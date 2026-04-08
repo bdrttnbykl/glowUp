@@ -26,12 +26,14 @@ export const defaultCustomerDraft: CustomerDraft = {
 
 export const defaultProductDraft: ProductDraft = {
   product: '',
+  itemType: 'Urun',
   transactionType: 'Alis',
   counterparty: '',
   category: '',
   costPrice: '',
   price: '',
   stock: '',
+  quantity: '',
 }
 
 export const defaultPackageSaleDraft: PackageSaleDraft = {
@@ -41,9 +43,6 @@ export const defaultPackageSaleDraft: PackageSaleDraft = {
   sessionType: 'Lazer',
   totalSessions: '8',
   price: '',
-  staff: '',
-  firstSessionDate: '',
-  firstSessionTime: '',
 }
 
 export const defaultPackageSessionDraft: PackageSessionDraft = {
@@ -56,6 +55,7 @@ export const defaultAppointmentClosingDraft: AppointmentClosingDraft = {
   attendanceStatus: 'Geldi',
   paymentMethod: 'Nakit',
   collectedAmount: '',
+  productSales: [],
 }
 
 export const serviceOptions = [
@@ -82,6 +82,25 @@ export const staffOptions = [
   'Leyla Yusufoglu',
   'Kazim Cikit',
 ]
+
+// Temporary service-personnel matching until this is managed from an admin panel.
+export const serviceStaffOptionMap: Record<string, string[]> = {
+  'Ayak Bakimi': ['Cagdas Akkaya', 'Sengul Sener'],
+  'El Bakimi': ['Leyla Yusufoglu', 'Kazim Cikit'],
+  Manikur: ['Leyla Yusufoglu', 'Sengul Sener'],
+  Pedikur: ['Cagdas Akkaya', 'Kazim Cikit'],
+  'Kalici Oje': ['Leyla Yusufoglu', 'Sengul Sener', 'Kazim Cikit'],
+  'Nail Art': ['Leyla Yusufoglu', 'Kazim Cikit'],
+  'Cilt Bakimi': ['Cagdas Akkaya', 'Sengul Sener'],
+}
+
+export const getStaffOptionsForService = (serviceLabel: string) => {
+  if (!serviceLabel) {
+    return []
+  }
+
+  return serviceStaffOptionMap[serviceLabel] || staffOptions
+}
 
 export const sidebarItems = [
   { label: 'Ozet', icon: 'home' },

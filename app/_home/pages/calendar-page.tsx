@@ -13,6 +13,8 @@ import { createDateFromIso, isPastAppointment } from '@/app/_home/utils'
 type CalendarPageProps = {
   calendarRangeLabel: string
   calendarSlots: string[]
+  calendarStaffFilter: string
+  calendarStaffOptions: string[]
   calendarView: string
   currentMonthDate: Date
   dailyAppointments: CalendarAppointment[]
@@ -25,8 +27,8 @@ type CalendarPageProps = {
   onGoToNextCalendarRange: () => void
   onGoToPreviousCalendarRange: () => void
   onOpenAppointmentModal: () => void
-  onPlaceholderAction: (label: string) => void
   onRefreshAppointments: () => void
+  onSelectCalendarStaff: (value: string) => void
   onSelectToday: () => void
   onStartEditingNote: (item: CalendarAppointment) => void
   setIsCalendarViewMenuOpen: Dispatch<SetStateAction<boolean>>
@@ -37,6 +39,8 @@ type CalendarPageProps = {
 export function CalendarPage({
   calendarRangeLabel,
   calendarSlots,
+  calendarStaffFilter,
+  calendarStaffOptions,
   calendarView,
   currentMonthDate,
   dailyAppointments,
@@ -49,8 +53,8 @@ export function CalendarPage({
   onGoToNextCalendarRange,
   onGoToPreviousCalendarRange,
   onOpenAppointmentModal,
-  onPlaceholderAction,
   onRefreshAppointments,
+  onSelectCalendarStaff,
   onSelectToday,
   onStartEditingNote,
   setIsCalendarViewMenuOpen,
@@ -64,13 +68,6 @@ export function CalendarPage({
         description="Gunluk, haftalik ve aylik planlari tek takvim yuzeyinde takip et. Ustten araligi degistir, gorunumu sec ve yeni randevuyu hizlica olustur."
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => onPlaceholderAction('Ayar')}
-              className="rounded-2xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-slate-600"
-            >
-              Ayar
-            </button>
             <button
               type="button"
               onClick={onRefreshAppointments}
@@ -131,13 +128,17 @@ export function CalendarPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => onPlaceholderAction('Personel')}
-              className="rounded-2xl border border-[#c8d6e8] bg-white px-5 py-3 text-base text-slate-700"
+            <select
+              value={calendarStaffFilter}
+              onChange={(event) => onSelectCalendarStaff(event.target.value)}
+              className="rounded-2xl border border-[#c8d6e8] bg-white px-5 py-3 text-base text-slate-700 outline-none"
             >
-              Cagdas Akkaya
-            </button>
+              {calendarStaffOptions.map((staffOption) => (
+                <option key={staffOption} value={staffOption}>
+                  {staffOption}
+                </option>
+              ))}
+            </select>
             <div className="relative">
               <button
                 type="button"
@@ -180,7 +181,7 @@ export function CalendarPage({
           <div className="grid grid-cols-[54px_minmax(0,1fr)_42px]">
             <div className="border-r border-slate-300 bg-[#f5f7fb]" />
             <div className="bg-[linear-gradient(135deg,#315b90_0%,#6f93c1_100%)] py-3 text-center text-xl font-semibold text-white">
-              Cagdas Akkaya
+              {calendarStaffFilter}
             </div>
             <div className="border-l border-slate-300 bg-[#edf3fb]" />
           </div>

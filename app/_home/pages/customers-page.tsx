@@ -3,12 +3,12 @@
 import { useDeferredValue, useState } from 'react'
 import {
   DashboardMessage,
-  DashboardMetric,
   DashboardPageHero,
   DashboardPageShell,
   DashboardSectionCard,
 } from '@/app/_home/components/dashboard-page-shell'
 import type { MergedCustomer } from '@/app/_home/types'
+import { downloadPdfFile } from '@/app/_home/utils'
 
 type CustomersPageProps = {
   customers: MergedCustomer[]
@@ -59,41 +59,30 @@ export function CustomersPage({
       return sortOrder === 'oldest' ? leftTime - rightTime : rightTime - leftTime
     })
 
-  const manualCount = customers.filter((item) => item.source === 'manual').length
-  const appointmentCount = customers.filter((item) => item.source === 'appointment').length
-  const mixedCount = customers.filter((item) => item.source === 'both').length
-
   const handleDownload = () => {
-    const lines = [
-      ['Musteri', 'Telefon', 'Kaynak', 'Olusturulma'].join(','),
-      ...filteredCustomers.map((item) =>
-        [
-          item.customer,
-          item.phone || '',
-          item.source === 'manual'
-            ? 'Manuel'
-            : item.source === 'appointment'
-              ? 'Randevu'
-              : 'Manuel + Randevu',
-          new Date(item.created_at).toLocaleDateString('tr-TR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          }),
-        ]
-          .map((value) => `"${value.replaceAll('"', '""')}"`)
-          .join(',')
-      ),
+    const rows = [
+      ['Musteri', 'Telefon', 'Kaynak', 'Olusturulma'],
+      ...filteredCustomers.map((item) => [
+        item.customer,
+        item.phone || '',
+        item.source === 'manual'
+          ? 'Manuel'
+          : item.source === 'appointment'
+            ? 'Randevu'
+            : 'Manuel + Randevu',
+        new Date(item.created_at).toLocaleDateString('tr-TR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        }),
+      ]),
     ]
-    const blob = new Blob([`\uFEFF${lines.join('\n')}`], {
-      type: 'text/csv;charset=utf-8;',
+
+    downloadPdfFile({
+      filename: 'musteriler.pdf',
+      rows,
+      title: 'Musteri Listesi',
     })
-    const downloadUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = downloadUrl
-    anchor.download = 'musteriler.csv'
-    anchor.click()
-    URL.revokeObjectURL(downloadUrl)
   }
 
   return (
@@ -117,13 +106,6 @@ export function CustomersPage({
             >
               Yenile
             </button>
-          </>
-        }
-        stats={
-          <>
-            <DashboardMetric label="Manuel" value={`${manualCount}`} />
-            <DashboardMetric label="Randevu" value={`${appointmentCount}`} tone="emerald" />
-            <DashboardMetric label="Birlesik" value={`${mixedCount}`} tone="amber" />
           </>
         }
       />

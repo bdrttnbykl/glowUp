@@ -119,7 +119,7 @@ export function DashboardHeader({
           </div>
           <div>
             <p className="text-[15px] font-semibold text-slate-700">glowUp</p>
-            <p className="text-sm text-slate-400">Cagdas El Ayak Bakim Merkezi</p>
+            <p className="text-sm text-slate-400">Pera Beauty House</p>
           </div>
         </div>
       </div>

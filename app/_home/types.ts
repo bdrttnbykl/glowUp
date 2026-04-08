@@ -49,7 +49,10 @@ export type CustomerDraft = {
 export type Product = {
   id: number
   product: string
+  item_type: string | null
   transaction_type: string | null
+  appointment_id: number | null
+  quantity: number | null
   counterparty: string | null
   category: string | null
   cost_price: string | null
@@ -60,12 +63,14 @@ export type Product = {
 
 export type ProductDraft = {
   product: string
+  itemType: 'Urun' | 'Hizmet'
   transactionType: string
   counterparty: string
   category: string
   costPrice: string
   price: string
   stock: string
+  quantity: string
 }
 
 export type PackageSale = {
@@ -88,9 +93,6 @@ export type PackageSaleDraft = {
   sessionType: string
   totalSessions: string
   price: string
-  staff: string
-  firstSessionDate: string
-  firstSessionTime: string
 }
 
 export type PackageSessionDraft = {
@@ -103,6 +105,14 @@ export type AppointmentClosingDraft = {
   attendanceStatus: string
   paymentMethod: string
   collectedAmount: string
+  productSales: AppointmentClosingProductDraft[]
+}
+
+export type AppointmentClosingProductDraft = {
+  id: number | null
+  product: string
+  price: string
+  quantity: string
 }
 
 export type AppointmentRow = Appointment & {
@@ -145,4 +155,14 @@ export type PersonnelReportRow = {
   packageRevenue: number
   totalTransactions: number
   totalRevenue: number
+}
+
+export type PersonnelDetailEntry = {
+  amount: number
+  customer: string
+  kind: 'Hizmet' | 'Paket'
+  label: string
+  occurredAt: string
+  paymentMethod: string | null
+  phone: string | null
 }

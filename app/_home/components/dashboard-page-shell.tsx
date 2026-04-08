@@ -56,7 +56,9 @@ export function DashboardPageHero({
           <p className="mt-3 max-w-2xl text-[15px] leading-7 text-slate-600">{description}</p>
         </div>
 
-        <div className="flex flex-col gap-3 xl:items-end">
+        <div
+          className={`flex flex-col gap-3 xl:items-end ${stats ? '' : 'xl:self-stretch xl:justify-center'}`.trim()}
+        >
           {actions && <div className="flex flex-wrap gap-2 xl:justify-end">{actions}</div>}
           {stats && <div className="flex flex-wrap gap-3 xl:justify-end">{stats}</div>}
         </div>

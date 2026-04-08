@@ -24,7 +24,7 @@ export function DashboardSidebar({
   onToggleReportMenu,
 }: DashboardSidebarProps) {
   return (
-    <aside className="group hidden w-[74px] flex-col justify-between overflow-hidden bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px] lg:flex">
+    <aside className="group fixed left-0 top-0 z-30 hidden h-screen w-[74px] flex-col justify-between overflow-hidden bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px] lg:flex">
       <div className="relative flex-1 px-3 py-5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
 

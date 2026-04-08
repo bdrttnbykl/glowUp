@@ -9,36 +9,26 @@ import {
   DashboardSectionCard,
 } from '@/app/_home/components/dashboard-page-shell'
 import type { Appointment, AppointmentRow } from '@/app/_home/types'
-import { isPastAppointment } from '@/app/_home/utils'
+import { downloadPdfFile, isPastAppointment } from '@/app/_home/utils'
 
 type AppointmentsPageProps = {
   appointmentRows: AppointmentRow[]
-  editingContent: string
-  editingNoteId: number | null
   message: string
-  onCancelEditingNote: () => void
-  onChangeEditingContent: (value: string) => void
   onDeleteNote: (id: number) => void
   onOpenAppointmentClosingModal: (item: Appointment) => void
   onPlaceholderAction: (label: string) => void
   onRefreshAppointments: () => void
   onStartEditingNote: (item: Appointment) => void
-  onUpdateNote: (id: number) => void
 }
 
 export function AppointmentsPage({
   appointmentRows,
-  editingContent,
-  editingNoteId,
   message,
-  onCancelEditingNote,
-  onChangeEditingContent,
   onDeleteNote,
   onOpenAppointmentClosingModal,
   onPlaceholderAction,
   onRefreshAppointments,
   onStartEditingNote,
-  onUpdateNote,
 }: AppointmentsPageProps) {
   const [visibilityFilter, setVisibilityFilter] = useState<'Acik' | 'Sonuclanan' | 'Hepsi'>(
     'Acik'
@@ -56,6 +46,50 @@ export function AppointmentsPage({
 
     return true
   })
+
+  const handleDownload = () => {
+    const rows = [
+      [
+        'Musteri',
+        'Telefon',
+        'Hizmet',
+        'Hizmet veren',
+        'Tarih',
+        'Saat',
+        'Durum',
+        'Musteri durumu',
+        'Odeme yontemi',
+        'Tahsilat',
+        'Toplam hizmet fiyati',
+        'Olusturan',
+        'Olusturulma tarihi',
+        'Olusturulma saati',
+      ],
+      ...filteredAppointments.map((item) => [
+        item.customer || '',
+        item.phone || '',
+        item.service,
+        item.staff || '',
+        item.date || '',
+        item.time || '',
+        item.status || 'Taslak',
+        item.attendance_status || '',
+        item.payment_method || '',
+        item.collected_amount || '',
+        item.total_price || '',
+        item.creator || '',
+        item.createdLabel,
+        item.createdTime,
+      ]),
+    ]
+
+    downloadPdfFile({
+      filename: 'randevular.pdf',
+      orientation: 'landscape',
+      rows,
+      title: 'Randevu Listesi',
+    })
+  }
 
   return (
     <DashboardPageShell>
@@ -127,7 +161,7 @@ export function AppointmentsPage({
             </button>
             <button
               type="button"
-              onClick={() => onPlaceholderAction('Indir')}
+              onClick={handleDownload}
               className="rounded-2xl bg-[#537bb4] px-5 py-3 text-sm font-medium text-white"
             >
               Indir
@@ -136,7 +170,7 @@ export function AppointmentsPage({
         </div>
 
         <div className="mt-4 rounded-2xl border border-[#d9e2ef] bg-[#f8fbff] px-5 py-4 text-sm leading-6 text-slate-600">
-          Randevu sonucunu kaydetmek icin gecmis kayitlarda `Sonuclandir` kullan. Paket
+          Randevu sonucunu kaydetmek veya guncellemek icin `Sonuclandir` kullan. Paket
           randevularinda seans dusumu sadece `Geldi` secildiginde yapilir.
         </div>
       </DashboardSectionCard>
@@ -178,35 +212,7 @@ export function AppointmentsPage({
                   <tr key={item.id} className="border-b border-slate-100 align-top">
                     <td className="px-4 py-5 font-medium text-slate-800">{item.customer || '-'}</td>
                     <td className="px-4 py-5">{item.phone || '-'}</td>
-                    <td className="px-4 py-5">
-                      {editingNoteId === item.id ? (
-                        <div className="space-y-2">
-                          <input
-                            value={editingContent}
-                            onChange={(e) => onChangeEditingContent(e.target.value)}
-                            className="w-full rounded-xl border border-[#c8d6e8] bg-[#f8fbff] px-3 py-2 text-sm outline-none"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onUpdateNote(item.id)}
-                              className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white"
-                            >
-                              Kaydet
-                            </button>
-                            <button
-                              type="button"
-                              onClick={onCancelEditingNote}
-                              className="rounded-xl border border-slate-300 px-3 py-2 text-xs"
-                            >
-                              Iptal
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        item.service
-                      )}
-                    </td>
+                    <td className="px-4 py-5">{item.service}</td>
                     <td className="px-4 py-5">{item.staff || '-'}</td>
                     <td className="px-4 py-5">{item.date || '-'}</td>
                     <td className="px-4 py-5">{item.time || '-'}</td>
@@ -243,15 +249,15 @@ export function AppointmentsPage({
                         >
                           Duzenle
                         </button>
-                        {isPastAppointment(item.date, item.time) && !item.closed_at && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenAppointmentClosingModal(item)}
-                            className="rounded-xl bg-rose-600 px-4 py-3 text-white"
-                          >
-                            Sonuclandir
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => onOpenAppointmentClosingModal(item)}
+                          className={`rounded-xl px-4 py-3 text-white ${
+                            item.closed_at ? 'bg-amber-600' : 'bg-rose-600'
+                          }`}
+                        >
+                          {item.closed_at ? 'Sonucu duzenle' : 'Sonuclandir'}
+                        </button>
                         <button
                           type="button"
                           onClick={() => onDeleteNote(item.id)}

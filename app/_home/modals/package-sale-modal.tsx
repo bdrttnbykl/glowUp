@@ -1,4 +1,4 @@
-import { packageSessionTypeOptions, staffOptions } from '@/app/_home/constants'
+import { packageSessionTypeOptions } from '@/app/_home/constants'
 import type { PackageSaleDraft } from '@/app/_home/types'
 
 type PackageSaleModalProps = {
@@ -29,7 +29,7 @@ export function PackageSaleModal({
           <div>
             <h2 className="text-2xl font-semibold text-slate-800">Yeni paket satisi</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Paket kaydini olustur, ilk seans randevusunu bagla ve kalan seanslari takip et.
+              Paket kaydini olustur. Seanslari daha sonra paket sahibi uzerinden manuel eklersin.
             </p>
           </div>
           <button
@@ -81,32 +81,11 @@ export function PackageSaleModal({
             placeholder="Paket fiyati"
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
           />
-          <select
-            value={draft.staff}
-            onChange={(e) => onDraftChange({ ...draft, staff: e.target.value })}
-            className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
-          >
-            <option value="">Ilk seans hizmet vereni</option>
-            {staffOptions.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             Paket satislari odeme tipi otomatik olarak `Nakit` kaydedilir.
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="date"
-              value={draft.firstSessionDate}
-              onChange={(e) => onDraftChange({ ...draft, firstSessionDate: e.target.value })}
-              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
-            />
-            <input
-              type="time"
-              value={draft.firstSessionTime}
-              onChange={(e) => onDraftChange({ ...draft, firstSessionTime: e.target.value })}
-              className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
-            />
+          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            Paket olustuktan sonra musteri satirina tiklayarak ya da `Seans ekle` butonuyla seans planlayabilirsin.
           </div>
         </div>
 

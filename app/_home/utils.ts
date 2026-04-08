@@ -1,3 +1,6 @@
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+
 import { monthLabels, weekDayLongLabels } from './constants'
 import type { CashReportPeriod } from './types'
 
@@ -147,6 +150,112 @@ export const formatCurrencyValue = (value: number) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} TL`
+}
+
+type DownloadPdfOptions = {
+  filename: string
+  orientation?: 'landscape' | 'portrait'
+  rows: string[][]
+  title: string
+}
+
+let pdfFontBase64Promise: Promise<string> | null = null
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x8000
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+  }
+
+  return btoa(binary)
+}
+
+const getPdfFontBase64 = async () => {
+  if (!pdfFontBase64Promise) {
+    pdfFontBase64Promise = fetch('/fonts/arial.ttf').then(async (response) => {
+      if (!response.ok) {
+        throw new Error('PDF fontu yuklenemedi.')
+      }
+
+      return arrayBufferToBase64(await response.arrayBuffer())
+    })
+  }
+
+  return pdfFontBase64Promise
+}
+
+const applyPdfFont = async (doc: jsPDF) => {
+  try {
+    const fontBase64 = await getPdfFontBase64()
+    doc.addFileToVFS('Arial.ttf', fontBase64)
+    doc.addFont('Arial.ttf', 'ArialUnicode', 'normal')
+    doc.addFont('Arial.ttf', 'ArialUnicode', 'bold')
+    return 'ArialUnicode'
+  } catch {
+    return 'helvetica'
+  }
+}
+
+export const downloadPdfFile = async ({
+  filename,
+  orientation = 'portrait',
+  rows,
+  title,
+}: DownloadPdfOptions) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const [headRow, ...bodyRows] = rows
+  const doc = new jsPDF({
+    orientation,
+    unit: 'pt',
+    format: 'a4',
+    compress: true,
+  })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const fontName = await applyPdfFont(doc)
+
+  doc.setFont(fontName, 'bold')
+  doc.setFontSize(16)
+  doc.text(title, 40, 40)
+  doc.setFont(fontName, 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(100)
+  doc.text(new Date().toLocaleString('tr-TR'), pageWidth - 40, 40, { align: 'right' })
+
+  autoTable(doc, {
+    head: [headRow],
+    body: bodyRows,
+    startY: 56,
+    margin: { left: 24, right: 24, top: 56, bottom: 24 },
+    styles: {
+      font: fontName,
+      fontSize: 8,
+      cellPadding: 4,
+      overflow: 'linebreak',
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [83, 123, 180],
+      textColor: [255, 255, 255],
+      font: fontName,
+      fontStyle: 'bold',
+    },
+    bodyStyles: {
+      font: fontName,
+      textColor: [51, 65, 85],
+    },
+    alternateRowStyles: {
+      fillColor: [248, 251, 255],
+    },
+    theme: 'grid',
+  })
+
+  doc.save(filename)
 }
 
 export const isDateWithinReportPeriod = (

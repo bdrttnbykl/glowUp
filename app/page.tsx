@@ -8,6 +8,7 @@ import {
   defaultPackageSaleDraft,
   defaultPackageSessionDraft,
   defaultProductDraft,
+  monthLabels,
   staffOptions,
   weekDayLongLabels,
 } from '@/app/_home/constants'
@@ -19,6 +20,8 @@ import { AppointmentModal } from '@/app/_home/modals/appointment-modal'
 import { CustomerModal } from '@/app/_home/modals/customer-modal'
 import { PackageSaleModal } from '@/app/_home/modals/package-sale-modal'
 import { PackageSessionModal } from '@/app/_home/modals/package-session-modal'
+import { PersonnelDetailModal } from '@/app/_home/modals/personnel-detail-modal'
+import { ProductHistoryModal } from '@/app/_home/modals/product-history-modal'
 import { ProductModal } from '@/app/_home/modals/product-modal'
 import { CalendarPage } from '@/app/_home/pages/calendar-page'
 import { AppointmentsPage } from '@/app/_home/pages/appointments-page'
@@ -27,6 +30,7 @@ import { CustomersPage } from '@/app/_home/pages/customers-page'
 import { PackageSalesPage } from '@/app/_home/pages/package-sales-page'
 import { PersonnelReportPage } from '@/app/_home/pages/personnel-report-page'
 import { ProductsPage } from '@/app/_home/pages/products-page'
+import { OverviewPage } from '@/app/_home/pages/overview-page'
 import { SalesReportPage } from '@/app/_home/pages/sales-report-page'
 import type {
   Appointment,
@@ -44,6 +48,7 @@ import type {
   PackageSaleDraft,
   PackageSaleRow,
   PackageSessionDraft,
+  PersonnelDetailEntry,
   PersonnelReportRow,
   Product,
   ProductDraft,
@@ -54,6 +59,7 @@ import {
   createDateFromIso,
   formatDisplayDate,
   formatCurrencyValue,
+  formatDateIso,
   formatMonthRangeLabel,
   formatWeekRangeLabel,
   getMonthGridDates,
@@ -82,15 +88,14 @@ const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date
   return periodStart
 }
 
-const createCustomerSalesKey = (customer: string | null, phone: string | null) => {
+const createCustomerSalesKey = (customer: string | null) => {
   const normalizedCustomer = (customer || '').trim().toLocaleLowerCase('tr-TR')
-  const normalizedPhone = (phone || '').replace(/\D/g, '')
 
   if (!normalizedCustomer) {
     return ''
   }
 
-  return `${normalizedCustomer}::${normalizedPhone}`
+  return normalizedCustomer
 }
 
 const getPercentageDelta = (currentValue: number, previousValue: number) => {
@@ -101,11 +106,140 @@ const getPercentageDelta = (currentValue: number, previousValue: number) => {
   return ((currentValue - previousValue) / previousValue) * 100
 }
 
+type SalesTimelineEvent = {
+  amount: number
+  category: 'package' | 'product' | 'service'
+  occurredAt: string
+}
+
+const addSalesTimelineAmount = (
+  row: {
+    packageRevenue: number
+    productRevenue: number
+    serviceRevenue: number
+    totalRevenue: number
+  },
+  category: SalesTimelineEvent['category'],
+  amount: number
+) => {
+  row.totalRevenue += amount
+
+  if (category === 'service') {
+    row.serviceRevenue += amount
+    return
+  }
+
+  if (category === 'product') {
+    row.productRevenue += amount
+    return
+  }
+
+  row.packageRevenue += amount
+}
+
+const createSalesTimelineRows = (
+  period: CashReportPeriod,
+  events: readonly SalesTimelineEvent[],
+  referenceDate = new Date()
+) => {
+  const periodStart = getReportPeriodStart(period, referenceDate)
+  const rows: Array<{
+    label: string
+    packageRevenue: number
+    productRevenue: number
+    serviceRevenue: number
+    shortLabel: string
+    totalRevenue: number
+  }> = []
+  const rowLookup = new Map<string, (typeof rows)[number]>()
+
+  if (period === 'Bu yil') {
+    for (let monthIndex = 0; monthIndex <= referenceDate.getMonth(); monthIndex += 1) {
+      const row = {
+        label: monthLabels[monthIndex],
+        shortLabel: monthLabels[monthIndex].slice(0, 3),
+        serviceRevenue: 0,
+        productRevenue: 0,
+        packageRevenue: 0,
+        totalRevenue: 0,
+      }
+      const key = `${referenceDate.getFullYear()}-${monthIndex}`
+      rows.push(row)
+      rowLookup.set(key, row)
+    }
+
+    events.forEach((item) => {
+      const date = new Date(item.occurredAt)
+
+      if (Number.isNaN(date.getTime())) {
+        return
+      }
+
+      if (date.getTime() < periodStart.getTime() || date.getTime() > referenceDate.getTime()) {
+        return
+      }
+
+      const row = rowLookup.get(`${date.getFullYear()}-${date.getMonth()}`)
+
+      if (!row) {
+        return
+      }
+
+      addSalesTimelineAmount(row, item.category, item.amount)
+    })
+
+    return rows
+  }
+
+  const cursor = new Date(periodStart)
+
+  while (cursor.getTime() <= referenceDate.getTime()) {
+    const row = {
+      label: `${cursor.getDate()} ${monthLabels[cursor.getMonth()]} ${weekDayLongLabels[(cursor.getDay() + 6) % 7]}`,
+      shortLabel: `${cursor.getDate()} ${monthLabels[cursor.getMonth()].slice(0, 3)}`,
+      serviceRevenue: 0,
+      productRevenue: 0,
+      packageRevenue: 0,
+      totalRevenue: 0,
+    }
+    const key = formatDateIso(cursor)
+    rows.push(row)
+    rowLookup.set(key, row)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  events.forEach((item) => {
+    const date = new Date(item.occurredAt)
+
+    if (Number.isNaN(date.getTime())) {
+      return
+    }
+
+    if (date.getTime() < periodStart.getTime() || date.getTime() > referenceDate.getTime()) {
+      return
+    }
+
+    const row = rowLookup.get(formatDateIso(date))
+
+    if (!row) {
+      return
+    }
+
+    addSalesTimelineAmount(row, item.category, item.amount)
+  })
+
+  return rows
+}
+
 export default function Home() {
+  const [overviewPersonnelPeriod, setOverviewPersonnelPeriod] = useState<'Bugun' | 'Bu hafta' | 'Bu ay'>(
+    'Bu ay'
+  )
   const [mode, setMode] = useState<AuthMode>('login')
   const [activeSection, setActiveSection] = useState('Randevular')
   const [calendarView, setCalendarView] = useState('Gunluk gorunum')
   const [calendarDate, setCalendarDate] = useState(getTodayDateInputValue())
+  const [calendarStaffFilter, setCalendarStaffFilter] = useState('Tum personeller')
   const [cashReportPeriod, setCashReportPeriod] = useState<CashReportPeriod>('Bu ay')
   const [salesReportTarget, setSalesReportTarget] = useState('100000')
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(true)
@@ -121,6 +255,8 @@ export default function Home() {
   const [isPackageSaleModalOpen, setIsPackageSaleModalOpen] = useState(false)
   const [isPackageSessionModalOpen, setIsPackageSessionModalOpen] = useState(false)
   const [isAppointmentClosingModalOpen, setIsAppointmentClosingModalOpen] = useState(false)
+  const [isPersonnelDetailModalOpen, setIsPersonnelDetailModalOpen] = useState(false)
+  const [isProductHistoryModalOpen, setIsProductHistoryModalOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [userId, setUserId] = useState('')
@@ -135,6 +271,7 @@ export default function Home() {
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(defaultCustomerDraft)
   const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null)
   const [productDraft, setProductDraft] = useState<ProductDraft>(defaultProductDraft)
+  const [editingProductId, setEditingProductId] = useState<number | null>(null)
   const [packageSaleDraft, setPackageSaleDraft] = useState<PackageSaleDraft>(
     defaultPackageSaleDraft
   )
@@ -142,12 +279,13 @@ export default function Home() {
     defaultPackageSessionDraft
   )
   const [activePackageSaleId, setActivePackageSaleId] = useState<number | null>(null)
+  const [activePersonnelName, setActivePersonnelName] = useState<string | null>(null)
+  const [activeProductName, setActiveProductName] = useState<string | null>(null)
   const [closingAppointmentId, setClosingAppointmentId] = useState<number | null>(null)
+  const [editingAppointmentId, setEditingAppointmentId] = useState<number | null>(null)
   const [appointmentClosingDraft, setAppointmentClosingDraft] = useState<AppointmentClosingDraft>(
     defaultAppointmentClosingDraft
   )
-  const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
-  const [editingContent, setEditingContent] = useState('')
   const [loading, setLoading] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [message, setMessage] = useState('')
@@ -159,7 +297,8 @@ export default function Home() {
   const handleSectionChange = (section: string) => {
     setActiveSection(section)
     setMessage(
-      section === 'Randevular' ||
+      section === 'Ozet' ||
+        section === 'Randevular' ||
         section === 'Randevu takvimi' ||
         section === 'Urun ve hizmet' ||
         section === 'Paket satislari'
@@ -193,6 +332,7 @@ export default function Home() {
   const openAppointmentModal = () => {
     setActiveSection('Randevular')
     setIsQuickActionsOpen(false)
+    setEditingAppointmentId(null)
     setAppointmentDraft((current) => ({
       ...defaultAppointmentDraft,
       date: current.date || calendarDate || getTodayDateInputValue(),
@@ -203,6 +343,8 @@ export default function Home() {
   }
 
   const closeAppointmentModal = () => {
+    setEditingAppointmentId(null)
+    setAppointmentDraft(defaultAppointmentDraft)
     setIsAppointmentModalOpen(false)
   }
 
@@ -237,26 +379,39 @@ export default function Home() {
     setIsCustomerModalOpen(false)
   }
 
-  const openProductModal = () => {
+  const openProductModal = (product?: Product) => {
     setActiveSection('Urun ve hizmet')
     setIsQuickActionsOpen(false)
-    setProductDraft(defaultProductDraft)
+    setEditingProductId(product?.id || null)
+    setProductDraft(
+      product
+        ? {
+            product: product.product || '',
+            itemType: product.item_type === 'Hizmet' ? 'Hizmet' : 'Urun',
+            transactionType: product.transaction_type || 'Alis',
+            counterparty: product.counterparty || '',
+            category: product.category || '',
+            costPrice: product.cost_price || '',
+            price: product.price || '',
+            stock: product.stock || '',
+            quantity: product.quantity ? `${product.quantity}` : '',
+          }
+        : defaultProductDraft
+    )
     setMessage('')
     setIsProductModalOpen(true)
   }
 
   const closeProductModal = () => {
+    setEditingProductId(null)
+    setProductDraft(defaultProductDraft)
     setIsProductModalOpen(false)
   }
 
   const openPackageSaleModal = () => {
     setActiveSection('Paket satislari')
     setIsQuickActionsOpen(false)
-    setPackageSaleDraft({
-      ...defaultPackageSaleDraft,
-      staff: '',
-      firstSessionDate: calendarDate || getTodayDateInputValue(),
-    })
+    setPackageSaleDraft(defaultPackageSaleDraft)
     setMessage('')
     setIsPackageSaleModalOpen(true)
   }
@@ -266,13 +421,18 @@ export default function Home() {
   }
 
   const openPackageSessionModal = (item: PackageSaleRow) => {
-    if (item.remaining_sessions === 0) {
-      setMessage('Bu pakette kullanilacak seans kalmadi.')
+    const openAppointment = appointments.find(
+      (appointment) => appointment.package_sale_id === item.id && !appointment.closed_at
+    )
+
+    if (openAppointment) {
+      setMessage('Bu paketin acik seansi zaten var. Onu duzenleyebilirsin.')
+      startEditingNote(openAppointment)
       return
     }
 
-    if (item.has_open_appointment) {
-      setMessage('Bu paket icin zaten acik bir seans randevusu var.')
+    if (item.remaining_sessions === 0) {
+      setMessage('Bu pakette kullanilacak seans kalmadi.')
       return
     }
 
@@ -292,11 +452,24 @@ export default function Home() {
   }
 
   const openAppointmentClosingModal = (item: Appointment) => {
+    const linkedProductSales = products.filter(
+      (product) =>
+        product.appointment_id === item.id &&
+        product.item_type === 'Urun' &&
+        product.transaction_type === 'Satis'
+    )
+
     setClosingAppointmentId(item.id)
     setAppointmentClosingDraft({
       attendanceStatus: item.attendance_status || 'Geldi',
       paymentMethod: item.payment_method || 'Nakit',
       collectedAmount: item.collected_amount || item.total_price || '',
+      productSales: linkedProductSales.map((product) => ({
+        id: product.id,
+        product: product.product,
+        price: product.price || '',
+        quantity: `${product.quantity || 1}`,
+      })),
     })
     setMessage('')
     setIsAppointmentClosingModalOpen(true)
@@ -306,6 +479,28 @@ export default function Home() {
     setClosingAppointmentId(null)
     setAppointmentClosingDraft(defaultAppointmentClosingDraft)
     setIsAppointmentClosingModalOpen(false)
+  }
+
+  const openPersonnelDetailModal = (staffName: string) => {
+    setActivePersonnelName(staffName)
+    setMessage('')
+    setIsPersonnelDetailModalOpen(true)
+  }
+
+  const closePersonnelDetailModal = () => {
+    setActivePersonnelName(null)
+    setIsPersonnelDetailModalOpen(false)
+  }
+
+  const openProductHistoryModal = (productName: string) => {
+    setActiveProductName(productName)
+    setMessage('')
+    setIsProductHistoryModalOpen(true)
+  }
+
+  const closeProductHistoryModal = () => {
+    setActiveProductName(null)
+    setIsProductHistoryModalOpen(false)
   }
 
   const checkUser = async () => {
@@ -460,9 +655,9 @@ export default function Home() {
     setCustomerDraft(defaultCustomerDraft)
     setEditingCustomerId(null)
     setProductDraft(defaultProductDraft)
+    setEditingProductId(null)
     setPackageSaleDraft(defaultPackageSaleDraft)
-    setEditingNoteId(null)
-    setEditingContent('')
+    setEditingAppointmentId(null)
 
     const { error } = await supabase.auth.signOut({ scope: 'local' })
 
@@ -482,9 +677,10 @@ export default function Home() {
     setLoading(false)
   }
 
-  const addNote = async () => {
+  const saveAppointment = async () => {
     const trimmedService = appointmentDraft.service.trim()
     const today = getTodayDateInputValue()
+    const isEditingAppointment = editingAppointmentId !== null
 
     if (!trimmedService) {
       setMessage('En azindan hizmet alanini gir.')
@@ -496,7 +692,7 @@ export default function Home() {
       return
     }
 
-    if (appointmentDraft.date && appointmentDraft.date < today) {
+    if (!isEditingAppointment && appointmentDraft.date && appointmentDraft.date < today) {
       setMessage('Gecmis tarihli randevu olusturamazsin.')
       return
     }
@@ -515,20 +711,29 @@ export default function Home() {
       return
     }
 
-    const { error } = await supabase.from('appointments').insert([
-      {
-        user_id: user.id,
-        customer: appointmentDraft.customer.trim() || null,
-        phone: appointmentDraft.phone.trim() || null,
-        service: trimmedService,
-        staff: appointmentDraft.staff.trim(),
-        date: appointmentDraft.date || null,
-        time: appointmentDraft.time || null,
-        status: appointmentDraft.status || 'Taslak',
-        total_price: appointmentDraft.totalPrice.trim() || null,
-        creator: appointmentDraft.creator.trim() || userEmail || user.email || null,
-      },
-    ])
+    const appointmentPayload = {
+      customer: appointmentDraft.customer.trim() || null,
+      phone: appointmentDraft.phone.trim() || null,
+      service: trimmedService,
+      staff: appointmentDraft.staff.trim(),
+      date: appointmentDraft.date || null,
+      time: appointmentDraft.time || null,
+      status: appointmentDraft.status || 'Taslak',
+      total_price: appointmentDraft.totalPrice.trim() || null,
+      creator: appointmentDraft.creator.trim() || userEmail || user.email || null,
+    }
+    const { error } = isEditingAppointment
+      ? await supabase
+          .from('appointments')
+          .update(appointmentPayload)
+          .eq('id', editingAppointmentId)
+          .eq('user_id', user.id)
+      : await supabase.from('appointments').insert([
+          {
+            user_id: user.id,
+            ...appointmentPayload,
+          },
+        ])
 
     if (error) {
       setMessage(error.message)
@@ -536,9 +741,8 @@ export default function Home() {
       return
     }
 
-    setAppointmentDraft(defaultAppointmentDraft)
-    setMessage('Randevu eklendi.')
-    setIsAppointmentModalOpen(false)
+    closeAppointmentModal()
+    setMessage(isEditingAppointment ? 'Randevu guncellendi.' : 'Randevu eklendi.')
     await getAppointments()
     setLoading(false)
   }
@@ -597,9 +801,33 @@ export default function Home() {
 
   const addProduct = async () => {
     const trimmedProduct = productDraft.product.trim()
+    const isService = productDraft.itemType === 'Hizmet'
+    const isSale = productDraft.transactionType === 'Satis'
+    const normalizedQuantity =
+      !isService && isSale ? Number.parseInt(productDraft.quantity.trim(), 10) : null
 
     if (!trimmedProduct) {
-      setMessage('Urun adini gir.')
+      setMessage(isService ? 'Hizmet adini gir.' : 'Urun adini gir.')
+      return
+    }
+
+    if (isService && isSale && !productDraft.price.trim()) {
+      setMessage('Hizmet satis fiyatini gir.')
+      return
+    }
+
+    if (isService && !isSale && !productDraft.costPrice.trim()) {
+      setMessage('Hizmet alis maliyetini gir.')
+      return
+    }
+
+    if (!isService && isSale && !productDraft.price.trim()) {
+      setMessage('Urun satis fiyatini gir.')
+      return
+    }
+
+    if (!isService && isSale && (!Number.isFinite(normalizedQuantity) || (normalizedQuantity || 0) < 1)) {
+      setMessage('Urun satis adedi en az 1 olmali.')
       return
     }
 
@@ -617,24 +845,44 @@ export default function Home() {
       return
     }
 
-    const { error } = await supabase.from('products').insert([
-      {
-        user_id: user.id,
-        product: trimmedProduct,
-        transaction_type: productDraft.transactionType.trim() || 'Alis',
-        counterparty: productDraft.counterparty.trim() || null,
-        category: productDraft.category.trim() || null,
-        cost_price: productDraft.costPrice.trim() || null,
-        price: productDraft.price.trim() || null,
-        stock: productDraft.stock.trim() || null,
-      },
-    ])
+    const productPayload = {
+      product: trimmedProduct,
+      item_type: productDraft.itemType,
+      transaction_type: productDraft.transactionType.trim() || 'Alis',
+      counterparty: productDraft.counterparty.trim() || null,
+      category: productDraft.category.trim() || null,
+      cost_price: isService && isSale ? null : productDraft.costPrice.trim() || null,
+      price: isService && !isSale ? null : productDraft.price.trim() || null,
+      quantity: !isService && isSale ? normalizedQuantity : null,
+      stock: isService || isSale ? null : productDraft.stock.trim() || null,
+    }
+
+    const currentProduct = editingProductId
+      ? products.find((item) => item.id === editingProductId) || null
+      : null
+    const { error } = editingProductId
+      ? await supabase
+          .from('products')
+          .update({
+            ...productPayload,
+            appointment_id: currentProduct?.appointment_id ?? null,
+          })
+          .eq('id', editingProductId)
+          .eq('user_id', user.id)
+      : await supabase.from('products').insert([
+          {
+            user_id: user.id,
+            ...productPayload,
+          },
+        ])
 
     if (error) {
       setMessage(
         error.message.includes('cost_price') ||
+          error.message.includes('item_type') ||
           error.message.includes('transaction_type') ||
-          error.message.includes('counterparty')
+          error.message.includes('counterparty') ||
+          error.message.includes('quantity')
           ? 'Products tablosu guncel degil. urun migrationlarini calistir.'
           : error.message
       )
@@ -642,9 +890,16 @@ export default function Home() {
       return
     }
 
-    setProductDraft(defaultProductDraft)
-    setMessage('Urun eklendi.')
-    setIsProductModalOpen(false)
+    closeProductModal()
+    setMessage(
+      editingProductId
+        ? isService
+          ? 'Hizmet guncellendi.'
+          : 'Urun guncellendi.'
+        : isService
+          ? 'Hizmet eklendi.'
+          : 'Urun eklendi.'
+    )
     await getProducts()
     setLoading(false)
   }
@@ -661,6 +916,10 @@ export default function Home() {
       return
     }
 
+    if (editingProductId === productId) {
+      closeProductModal()
+    }
+
     setMessage('Urun silindi.')
     await getProducts()
   }
@@ -669,7 +928,6 @@ export default function Home() {
     const trimmedCustomer = packageSaleDraft.customer.trim()
     const trimmedPackageName = packageSaleDraft.packageName.trim()
     const totalSessions = Number.parseInt(packageSaleDraft.totalSessions, 10)
-    const today = getTodayDateInputValue()
 
     if (!trimmedCustomer) {
       setMessage('Musteri adini gir.')
@@ -683,26 +941,6 @@ export default function Home() {
 
     if (!Number.isFinite(totalSessions) || totalSessions < 1) {
       setMessage('Toplam seans en az 1 olmali.')
-      return
-    }
-
-    if (!packageSaleDraft.staff.trim()) {
-      setMessage('Ilk seans hizmet veren kisiyi sec.')
-      return
-    }
-
-    if (!packageSaleDraft.firstSessionDate) {
-      setMessage('Ilk seans tarihini sec.')
-      return
-    }
-
-    if (packageSaleDraft.firstSessionDate < today) {
-      setMessage('Gecmis tarihli ilk seans olusturamazsin.')
-      return
-    }
-
-    if (!packageSaleDraft.firstSessionTime) {
-      setMessage('Ilk seans saatini sec.')
       return
     }
 
@@ -748,39 +986,10 @@ export default function Home() {
       return
     }
 
-    const { error: appointmentError } = await supabase.from('appointments').insert([
-      {
-        user_id: user.id,
-        customer: trimmedCustomer,
-        phone: packageSaleDraft.phone.trim() || null,
-        service: `${trimmedPackageName} / ${packageSaleDraft.sessionType} / 1. seans`,
-        staff: packageSaleDraft.staff.trim(),
-        date: packageSaleDraft.firstSessionDate,
-        time: packageSaleDraft.firstSessionTime,
-        status: 'Onayli',
-        total_price: null,
-        creator: userEmail || user.email || null,
-        package_sale_id: data.id,
-        package_session_number: 1,
-      },
-    ])
-
-    if (appointmentError) {
-      await supabase.from('package_sales').delete().eq('id', data.id).eq('user_id', user.id)
-      setMessage(
-        appointmentError.message.includes('package_sale_id')
-          ? 'Appointments package migrationlarini calistir.'
-          : appointmentError.message
-      )
-      setLoading(false)
-      return
-    }
-
     setPackageSaleDraft(defaultPackageSaleDraft)
-    setMessage('Paket ve ilk seans randevusu olusturuldu.')
+    setMessage('Paket olusturuldu. Seansi paket sahibi uzerinden manuel ekleyebilirsin.')
     setIsPackageSaleModalOpen(false)
     await getPackageSales()
-    await getAppointments()
     setLoading(false)
   }
 
@@ -885,6 +1094,109 @@ export default function Home() {
     }
 
     const appointment = appointments.find((item) => item.id === closingAppointmentId)
+    const parseStockValue = (value: string | null) => {
+      const normalized = (value || '').replace(/[^\d-]/g, '')
+      const parsed = Number.parseInt(normalized, 10)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    const existingLinkedProductSales = products.filter(
+      (product) =>
+        product.appointment_id === closingAppointmentId &&
+        product.item_type === 'Urun' &&
+        product.transaction_type === 'Satis'
+    )
+    const normalizedProductSales = []
+
+    if (appointmentClosingDraft.attendanceStatus !== 'Gelmedi') {
+      for (const item of appointmentClosingDraft.productSales) {
+        const productLabel = item.product.trim()
+        const price = item.price.trim()
+        const quantityText = item.quantity.trim()
+
+        if (!productLabel && !price && !quantityText) {
+          continue
+        }
+
+        const quantity = Number.parseInt(quantityText, 10)
+
+        if (!productLabel || !price || !Number.isFinite(quantity) || quantity < 1) {
+          setMessage('Urun satirlarinda urun, adet ve satis tutari zorunlu.')
+          return
+        }
+
+        normalizedProductSales.push({
+          id: item.id,
+          product: productLabel,
+          price,
+          quantity,
+        })
+      }
+    }
+    const inventoryProductsByName = products.reduce<Record<string, Product>>((result, product) => {
+      if (
+        product.item_type !== 'Urun' ||
+        product.appointment_id != null ||
+        !(product.stock || '').trim()
+      ) {
+        return result
+      }
+
+      const key = product.product.trim().toLocaleLowerCase('tr-TR')
+
+      if (!key) {
+        return result
+      }
+
+      if (!result[key] || new Date(product.created_at).getTime() > new Date(result[key].created_at).getTime()) {
+        result[key] = product
+      }
+
+      return result
+    }, {})
+    const desiredQuantityByProduct = normalizedProductSales.reduce<Record<string, number>>(
+      (result, item) => {
+        const key = item.product.toLocaleLowerCase('tr-TR')
+        result[key] = (result[key] || 0) + item.quantity
+        return result
+      },
+      {}
+    )
+    const existingQuantityByProduct = existingLinkedProductSales.reduce<Record<string, number>>(
+      (result, item) => {
+        const key = item.product.trim().toLocaleLowerCase('tr-TR')
+        result[key] = (result[key] || 0) + (item.quantity || 1)
+        return result
+      },
+      {}
+    )
+    const stockAdjustmentByProduct = Object.keys({
+      ...existingQuantityByProduct,
+      ...desiredQuantityByProduct,
+    }).reduce<Record<string, number>>((result, key) => {
+      const desiredQuantity =
+        appointmentClosingDraft.attendanceStatus === 'Gelmedi' ? 0 : desiredQuantityByProduct[key] || 0
+      const existingQuantity = existingQuantityByProduct[key] || 0
+      result[key] = desiredQuantity - existingQuantity
+      return result
+    }, {})
+
+    for (const [productKey, quantityDelta] of Object.entries(stockAdjustmentByProduct)) {
+      if (quantityDelta <= 0) {
+        continue
+      }
+
+      const inventoryProduct = inventoryProductsByName[productKey]
+
+      if (!inventoryProduct) {
+        setMessage('Secilen urun icin stok karti bulunamadi.')
+        return
+      }
+
+      if (parseStockValue(inventoryProduct.stock) < quantityDelta) {
+        setMessage(`${inventoryProduct.product} icin yeterli stok yok.`)
+        return
+      }
+    }
 
     const paymentMethod =
       appointmentClosingDraft.attendanceStatus === 'Gelmedi'
@@ -942,47 +1254,153 @@ export default function Home() {
       }
     }
 
+    if (appointmentClosingDraft.attendanceStatus !== 'Gelmedi') {
+      for (const item of normalizedProductSales) {
+        const sourceProduct = inventoryProductsByName[item.product.toLocaleLowerCase('tr-TR')]
+
+        const productSalePayload = {
+          appointment_id: closingAppointmentId,
+          product: item.product,
+          item_type: 'Urun',
+          transaction_type: 'Satis',
+          counterparty: appointment?.customer || appointment?.phone || null,
+          category: sourceProduct?.category || null,
+          cost_price: null,
+          price: item.price,
+          stock: null,
+          quantity: item.quantity,
+        }
+
+        const { error: productSaleError } = item.id
+          ? await supabase
+              .from('products')
+              .update(productSalePayload)
+              .eq('id', item.id)
+              .eq('user_id', userId)
+          : await supabase.from('products').insert([
+              {
+                user_id: userId,
+                ...productSalePayload,
+              },
+            ])
+
+        if (productSaleError) {
+          setMessage(
+            productSaleError.message.includes('appointment_id')
+              ? 'Randevu urun satisi icin products appointment migrationini calistir.'
+              : productSaleError.message
+          )
+          setLoading(false)
+          return
+        }
+      }
+
+      for (const [productKey, quantityDelta] of Object.entries(stockAdjustmentByProduct)) {
+        if (quantityDelta === 0) {
+          continue
+        }
+
+        const inventoryProduct = inventoryProductsByName[productKey]
+
+        if (!inventoryProduct) {
+          continue
+        }
+
+        const nextStock = parseStockValue(inventoryProduct.stock) - quantityDelta
+        const { error: stockUpdateError } = await supabase
+          .from('products')
+          .update({ stock: `${nextStock}` })
+          .eq('id', inventoryProduct.id)
+          .eq('user_id', userId)
+
+        if (stockUpdateError) {
+          setMessage(stockUpdateError.message)
+          setLoading(false)
+          return
+        }
+      }
+
+      const removedProductSaleIds = existingLinkedProductSales
+        .filter((product) => !normalizedProductSales.some((item) => item.id === product.id))
+        .map((product) => product.id)
+
+      if (removedProductSaleIds.length > 0) {
+        const { error: deleteProductSalesError } = await supabase
+          .from('products')
+          .delete()
+          .in('id', removedProductSaleIds)
+          .eq('user_id', userId)
+
+        if (deleteProductSalesError) {
+          setMessage(deleteProductSalesError.message)
+          setLoading(false)
+          return
+        }
+      }
+    } else if (existingLinkedProductSales.length > 0) {
+      for (const [productKey, quantityDelta] of Object.entries(stockAdjustmentByProduct)) {
+        if (quantityDelta === 0) {
+          continue
+        }
+
+        const inventoryProduct = inventoryProductsByName[productKey]
+
+        if (!inventoryProduct) {
+          continue
+        }
+
+        const nextStock = parseStockValue(inventoryProduct.stock) - quantityDelta
+        const { error: stockUpdateError } = await supabase
+          .from('products')
+          .update({ stock: `${nextStock}` })
+          .eq('id', inventoryProduct.id)
+          .eq('user_id', userId)
+
+        if (stockUpdateError) {
+          setMessage(stockUpdateError.message)
+          setLoading(false)
+          return
+        }
+      }
+
+      const { error: deleteProductSalesError } = await supabase
+        .from('products')
+        .delete()
+        .in('id', existingLinkedProductSales.map((product) => product.id))
+        .eq('user_id', userId)
+
+      if (deleteProductSalesError) {
+        setMessage(deleteProductSalesError.message)
+        setLoading(false)
+        return
+      }
+    }
+
     setMessage('Randevu sonucu kaydedildi.')
     closeAppointmentClosingModal()
     await getAppointments()
+    await getProducts()
     await getPackageSales()
     setLoading(false)
   }
 
   const startEditingNote = (item: Appointment) => {
-    setEditingNoteId(item.id)
-    setEditingContent(item.service)
+    setActiveSection('Randevular')
+    setIsQuickActionsOpen(false)
+    setEditingAppointmentId(item.id)
+    setAppointmentDraft({
+      customer: item.customer || '',
+      phone: item.phone || '',
+      service: item.service,
+      staff: item.staff || '',
+      date: item.date || '',
+      time: item.time || '',
+      status: item.status || 'Taslak',
+      totalPrice: item.total_price || '',
+      creator: item.creator || userEmail,
+    })
     setMessage('')
-  }
-
-  const cancelEditingNote = () => {
-    setEditingNoteId(null)
-    setEditingContent('')
-  }
-
-  const updateNote = async (noteId: number) => {
-    const trimmedContent = editingContent.trim()
-
-    if (!trimmedContent) {
-      setMessage('Plan bos olamaz.')
-      return
-    }
-
-    const { error } = await supabase
-      .from('appointments')
-      .update({ service: trimmedContent })
-      .eq('id', noteId)
-      .eq('user_id', userId)
-
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-
-    setEditingNoteId(null)
-    setEditingContent('')
-    setMessage('Plan guncellendi.')
-    await getAppointments()
+    setIsAppointmentModalOpen(true)
   }
 
   const deleteNote = async (noteId: number) => {
@@ -997,9 +1415,9 @@ export default function Home() {
       return
     }
 
-    if (editingNoteId === noteId) {
-      setEditingNoteId(null)
-      setEditingContent('')
+    if (editingAppointmentId === noteId) {
+      setEditingAppointmentId(null)
+      setAppointmentDraft(defaultAppointmentDraft)
     }
 
     setMessage('Plan silindi.')
@@ -1101,22 +1519,27 @@ export default function Home() {
 
         return (left.time || '').localeCompare(right.time || '')
       })
-    const dailyAppointments = calendarItems.filter(
+    const filteredCalendarItems = calendarItems.filter(
+      (item) =>
+        calendarStaffFilter === 'Tum personeller' ||
+        (item.staff || '').trim() === calendarStaffFilter
+    )
+    const dailyAppointments = filteredCalendarItems.filter(
       (item) => item.calendarDate === calendarDate && item.slotIndex >= 0
     )
     const weekDates = getWeekDates(calendarDate)
-    const weekAppointmentsByDate = weekDates.reduce<Record<string, typeof calendarItems>>(
+    const weekAppointmentsByDate = weekDates.reduce<Record<string, typeof filteredCalendarItems>>(
       (result, date) => {
-        result[date] = calendarItems.filter((item) => item.calendarDate === date)
+        result[date] = filteredCalendarItems.filter((item) => item.calendarDate === date)
         return result
       },
       {}
     )
     const monthGridDates = getMonthGridDates(calendarDate)
     const monthAppointmentsByDate = monthGridDates.reduce<
-      Record<string, typeof calendarItems>
+      Record<string, typeof filteredCalendarItems>
     >((result, date) => {
-      result[date] = calendarItems.filter((item) => item.calendarDate === date)
+      result[date] = filteredCalendarItems.filter((item) => item.calendarDate === date)
       return result
     }, {})
     const currentMonthDate = createDateFromIso(calendarDate)
@@ -1131,6 +1554,7 @@ export default function Home() {
     )
     const productSalesForReport = products.filter(
       (item) =>
+        item.item_type === 'Urun' &&
         item.transaction_type === 'Satis' &&
         isDateWithinReportPeriod(item.created_at, cashReportPeriod)
     )
@@ -1147,6 +1571,7 @@ export default function Home() {
     )
     const productSalesForPreviousPeriod = products.filter(
       (item) =>
+        item.item_type === 'Urun' &&
         item.transaction_type === 'Satis' &&
         isDateWithinReportPeriod(item.created_at, cashReportPeriod, previousPeriodReference)
     )
@@ -1225,38 +1650,6 @@ export default function Home() {
         items: [],
       },
     ]
-    const initialPersonnelRows = staffOptions.reduce<Record<string, PersonnelReportRow>>(
-      (result, staffName) => {
-        result[staffName] = {
-          staff: staffName,
-          completedAppointments: 0,
-          appointmentRevenue: 0,
-          packageSales: 0,
-          packageRevenue: 0,
-          totalTransactions: 0,
-          totalRevenue: 0,
-        }
-        return result
-      },
-      {}
-    )
-    const ensurePersonnelRow = (staffName: string) => {
-      const normalizedStaffName = staffName.trim() || 'Atanmamis'
-
-      if (!initialPersonnelRows[normalizedStaffName]) {
-        initialPersonnelRows[normalizedStaffName] = {
-          staff: normalizedStaffName,
-          completedAppointments: 0,
-          appointmentRevenue: 0,
-          packageSales: 0,
-          packageRevenue: 0,
-          totalTransactions: 0,
-          totalRevenue: 0,
-        }
-      }
-
-      return initialPersonnelRows[normalizedStaffName]
-    }
     const packageSaleStaffLookup = appointmentRows.reduce<Record<number, string>>((result, item) => {
       if (!item.package_sale_id || item.package_session_number !== 1 || !item.staff?.trim()) {
         return result
@@ -1282,34 +1675,95 @@ export default function Home() {
       },
       {}
     )
+    const todayIso = getTodayDateInputValue()
+    const buildPersonnelRowsForPeriod = (period: 'Bugun' | CashReportPeriod) => {
+      const rowsByStaff = staffOptions.reduce<Record<string, PersonnelReportRow>>((result, staffName) => {
+        result[staffName] = {
+          staff: staffName,
+          completedAppointments: 0,
+          appointmentRevenue: 0,
+          packageSales: 0,
+          packageRevenue: 0,
+          totalTransactions: 0,
+          totalRevenue: 0,
+        }
+        return result
+      }, {})
 
-    closedAppointmentsForReport.forEach((item) => {
-      const row = ensurePersonnelRow(item.staff || 'Atanmamis')
-      row.completedAppointments += 1
-      row.appointmentRevenue += parseCurrencyValue(item.collected_amount || item.total_price)
-      row.totalTransactions = row.completedAppointments + row.packageSales
-      row.totalRevenue = row.appointmentRevenue + row.packageRevenue
-    })
+      const ensureRow = (staffName: string) => {
+        const normalizedStaffName = staffName.trim() || 'Atanmamis'
 
-    packageSalesForReport.forEach((item) => {
-      const row = ensurePersonnelRow(packageSaleStaffLookup[item.id] || 'Atanmamis')
-      row.packageSales += 1
-      row.packageRevenue += parseCurrencyValue(item.price)
-      row.totalTransactions = row.completedAppointments + row.packageSales
-      row.totalRevenue = row.appointmentRevenue + row.packageRevenue
-    })
+        if (!rowsByStaff[normalizedStaffName]) {
+          rowsByStaff[normalizedStaffName] = {
+            staff: normalizedStaffName,
+            completedAppointments: 0,
+            appointmentRevenue: 0,
+            packageSales: 0,
+            packageRevenue: 0,
+            totalTransactions: 0,
+            totalRevenue: 0,
+          }
+        }
 
-    const personnelReportRows = Object.values(initialPersonnelRows).sort((left, right) => {
-      if (right.totalRevenue !== left.totalRevenue) {
-        return right.totalRevenue - left.totalRevenue
+        return rowsByStaff[normalizedStaffName]
       }
 
-      if (right.totalTransactions !== left.totalTransactions) {
-        return right.totalTransactions - left.totalTransactions
+      const isWithinPersonnelPeriod = (dateValue: string | null) => {
+        if (!dateValue) {
+          return false
+        }
+
+        if (period === 'Bugun') {
+          const date = new Date(dateValue)
+
+          if (Number.isNaN(date.getTime())) {
+            return false
+          }
+
+          return formatDateIso(date) === todayIso
+        }
+
+        return isDateWithinReportPeriod(dateValue, period)
       }
 
-      return left.staff.localeCompare(right.staff, 'tr-TR')
-    })
+      appointmentRows
+        .filter(
+          (item) =>
+            !!item.closed_at &&
+            item.attendance_status !== 'Gelmedi' &&
+            isWithinPersonnelPeriod(item.closed_at)
+        )
+        .forEach((item) => {
+          const row = ensureRow(item.staff || 'Atanmamis')
+          row.completedAppointments += 1
+          row.appointmentRevenue += parseCurrencyValue(item.collected_amount || item.total_price)
+          row.totalTransactions = row.completedAppointments + row.packageSales
+          row.totalRevenue = row.appointmentRevenue + row.packageRevenue
+        })
+
+      packageSales
+        .filter((item) => isWithinPersonnelPeriod(item.created_at))
+        .forEach((item) => {
+          const row = ensureRow(packageSaleStaffLookup[item.id] || 'Atanmamis')
+          row.packageSales += 1
+          row.packageRevenue += parseCurrencyValue(item.price)
+          row.totalTransactions = row.completedAppointments + row.packageSales
+          row.totalRevenue = row.appointmentRevenue + row.packageRevenue
+        })
+
+      return Object.values(rowsByStaff).sort((left, right) => {
+        if (right.totalRevenue !== left.totalRevenue) {
+          return right.totalRevenue - left.totalRevenue
+        }
+
+        if (right.totalTransactions !== left.totalTransactions) {
+          return right.totalTransactions - left.totalTransactions
+        }
+
+        return left.staff.localeCompare(right.staff, 'tr-TR')
+      })
+    }
+    const personnelReportRows = buildPersonnelRowsForPeriod(cashReportPeriod)
     const paidAppointmentSalesForReport = closedAppointmentsForReport
       .map((item) => ({
         amount: parseCurrencyValue(item.collected_amount || item.total_price),
@@ -1333,6 +1787,60 @@ export default function Home() {
         staff: packageSaleStaffLookup[item.id] || 'Atanmamis',
       }))
       .filter((item) => item.amount > 0)
+    const personnelDetailEntriesByStaff = [
+      ...closedAppointmentsForReport
+        .map<PersonnelDetailEntry | null>((item) => {
+          const staffName = item.staff?.trim() || 'Atanmamis'
+          const amount = parseCurrencyValue(item.collected_amount || item.total_price)
+
+          if (amount <= 0) {
+            return null
+          }
+
+          return {
+            amount,
+            customer: item.customer?.trim() || 'Belirtilmeyen musteri',
+            kind: 'Hizmet',
+            label: item.service.trim() || 'Belirtilmeyen hizmet',
+            occurredAt: item.closed_at || item.created_at,
+            paymentMethod: item.payment_method?.trim() || null,
+            phone: item.phone || null,
+            staff: staffName,
+          }
+        })
+        .filter((item): item is PersonnelDetailEntry & { staff: string } => item !== null),
+      ...paidPackageSalesForReport.map((item) => ({
+        amount: item.amount,
+        customer: item.customer?.trim() || 'Belirtilmeyen musteri',
+        kind: 'Paket' as const,
+        label: item.packageLabel,
+        occurredAt: item.occurredAt,
+        paymentMethod: item.paymentMethod || null,
+        phone: item.phone || null,
+        staff: item.staff || 'Atanmamis',
+      })),
+    ].reduce<Record<string, PersonnelDetailEntry[]>>((result, item) => {
+      if (!result[item.staff]) {
+        result[item.staff] = []
+      }
+
+      result[item.staff].push({
+        amount: item.amount,
+        customer: item.customer,
+        kind: item.kind,
+        label: item.label,
+        occurredAt: item.occurredAt,
+        paymentMethod: item.paymentMethod,
+        phone: item.phone,
+      })
+
+      return result
+    }, {})
+    Object.values(personnelDetailEntriesByStaff).forEach((entries) => {
+      entries.sort(
+        (left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime()
+      )
+    })
     const paidProductSalesForReport = productSalesForReport
       .map((item) => ({
         amount: parseCurrencyValue(item.price),
@@ -1454,20 +1962,28 @@ export default function Home() {
       item.share = paymentTrackedRevenue > 0 ? (item.amount / paymentTrackedRevenue) * 100 : 0
     })
     paymentRows.sort((left, right) => right.amount - left.amount)
-    const salesActivityEvents = [
+    const salesTimelineEvents: SalesTimelineEvent[] = [
       ...paidAppointmentSalesForReport.map((item) => ({
         amount: item.amount,
         occurredAt: item.occurredAt,
+        category: 'service' as const,
       })),
       ...paidPackageSalesForReport.map((item) => ({
         amount: item.amount,
         occurredAt: item.occurredAt,
+        category: 'package' as const,
       })),
       ...paidProductSalesForReport.map((item) => ({
         amount: item.amount,
         occurredAt: item.occurredAt,
+        category: 'product' as const,
       })),
     ]
+    const salesActivityEvents = salesTimelineEvents.map((item) => ({
+      amount: item.amount,
+      occurredAt: item.occurredAt,
+    }))
+    const salesTimelineRows = createSalesTimelineRows(cashReportPeriod, salesTimelineEvents)
     const dayRows = weekDayLongLabels.map((label) => ({
       label,
       transactions: 0,
@@ -1519,13 +2035,13 @@ export default function Home() {
             parseCurrencyValue(item.collected_amount || item.total_price) > 0
         )
         .map((item) => ({
-          customerKey: createCustomerSalesKey(item.customer, item.phone),
+          customerKey: createCustomerSalesKey(item.customer),
           occurredAt: item.closed_at || item.created_at,
         })),
       ...packageSales
         .filter((item) => parseCurrencyValue(item.price) > 0)
         .map((item) => ({
-          customerKey: createCustomerSalesKey(item.customer, item.phone),
+          customerKey: createCustomerSalesKey(item.customer),
           occurredAt: item.created_at,
         })),
     ]
@@ -1565,11 +2081,11 @@ export default function Home() {
     ;[
       ...paidAppointmentSalesForReport.map((item) => ({
         amount: item.amount,
-        customerKey: createCustomerSalesKey(item.customer, item.phone),
+        customerKey: createCustomerSalesKey(item.customer),
       })),
       ...paidPackageSalesForReport.map((item) => ({
         amount: item.amount,
-        customerKey: createCustomerSalesKey(item.customer, item.phone),
+        customerKey: createCustomerSalesKey(item.customer),
       })),
     ]
       .filter((item) => item.customerKey)
@@ -1738,11 +2254,8 @@ export default function Home() {
     const mergedCustomers = [...customers, ...appointmentCustomers].reduce<MergedCustomer[]>(
       (result, item) => {
       const normalizedName = item.customer.trim().toLocaleLowerCase('tr-TR')
-      const normalizedPhone = (item.phone || '').trim()
       const existingCustomer = result.find(
-        (current) =>
-          current.customer.trim().toLocaleLowerCase('tr-TR') === normalizedName &&
-          (current.phone || '').trim() === normalizedPhone
+        (current) => current.customer.trim().toLocaleLowerCase('tr-TR') === normalizedName
       )
 
       if (!item.customer.trim()) {
@@ -1760,6 +2273,87 @@ export default function Home() {
 
       return result
     }, [])
+    const appointmentClosingProductOptions = Object.values(
+      products
+        .filter(
+          (item) =>
+            item.item_type === 'Urun' &&
+            item.appointment_id == null &&
+            !!(item.stock || '').trim()
+        )
+        .reduce<
+          Record<
+            string,
+            {
+              availableStock: number
+              category: string | null
+              created_at: string
+              defaultPrice: string
+              label: string
+              stockProductId: number
+              value: string
+            }
+          >
+        >((result, item) => {
+          const key = item.product.trim().toLocaleLowerCase('tr-TR')
+
+          if (!key) {
+            return result
+          }
+
+          const candidate = {
+            availableStock: Number.parseInt((item.stock || '0').replace(/[^\d-]/g, ''), 10) || 0,
+            category: item.category?.trim() || null,
+            created_at: item.created_at,
+            defaultPrice: item.price || '',
+            label: item.category?.trim() ? `${item.product} / ${item.category}` : item.product,
+            stockProductId: item.id,
+            value: item.product,
+          }
+
+          if (!result[key] || new Date(candidate.created_at).getTime() > new Date(result[key].created_at).getTime()) {
+            result[key] = candidate
+          }
+
+          return result
+        }, {})
+    )
+      .sort((left, right) => left.label.localeCompare(right.label, 'tr-TR'))
+    const activeProductHistoryEntries = activeProductName
+      ? [...products]
+          .filter(
+            (item) =>
+              item.product.trim().toLocaleLowerCase('tr-TR') ===
+              activeProductName.trim().toLocaleLowerCase('tr-TR')
+          )
+          .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+      : []
+    const overviewToday = getTodayDateInputValue()
+    const overviewUpcomingAppointments = appointmentRows
+      .filter((item) => !item.closed_at && !!item.date && item.date >= overviewToday)
+      .sort((left, right) => {
+        const leftKey = `${left.date || ''} ${left.time || '99:99'}`
+        const rightKey = `${right.date || ''} ${right.time || '99:99'}`
+        return leftKey.localeCompare(rightKey, 'tr-TR')
+      })
+      .slice(0, 6)
+    const dashboardOverviewTotals = {
+      openAppointments: appointmentRows.filter((item) => !item.closed_at).length,
+      todayAppointments: appointmentRows.filter((item) => item.date === overviewToday).length,
+      totalCustomers: mergedCustomers.length,
+      activePackages: packageSaleRows.filter((item) => item.remaining_sessions > 0).length,
+      monthlyRevenue: appointmentIncomeTotal + packageSalesTotal + productSalesTotal,
+      serviceRevenue: appointmentIncomeTotal,
+      packageRevenue: packageSalesTotal,
+      productRevenue: productSalesTotal,
+    }
+    const overviewTopServiceRows = serviceRows.slice(0, 4)
+    const overviewTopPersonnelRows = buildPersonnelRowsForPeriod(overviewPersonnelPeriod).slice(0, 5)
+    const activePersonnelDetailRow =
+      personnelReportRows.find((item) => item.staff === activePersonnelName) || null
+    const activePersonnelDetailEntries = activePersonnelName
+      ? personnelDetailEntriesByStaff[activePersonnelName] || []
+      : []
     const calendarRangeLabel =
       calendarView === 'Haftalik gorunum'
         ? formatWeekRangeLabel(calendarDate)
@@ -1818,7 +2412,7 @@ export default function Home() {
             onToggleReportMenu={handleReportMenuToggle}
           />
 
-          <section className="min-w-0 flex-1 overflow-x-hidden">
+          <section className="min-w-0 flex-1 overflow-x-hidden lg:pl-[74px]">
             <DashboardHeader
               isQuickActionsOpen={isQuickActionsOpen}
               onOpenAppointmentModal={openAppointmentModal}
@@ -1834,10 +2428,22 @@ export default function Home() {
             <DashboardBreadcrumb activeSection={activeSection} />
 
             <div className="px-4 py-5 md:px-6">
-              {activeSection === 'Randevu takvimi' ? (
+              {activeSection === 'Ozet' ? (
+                <OverviewPage
+                  message={message}
+                  onChangePersonnelPeriod={setOverviewPersonnelPeriod}
+                  personnelPeriod={overviewPersonnelPeriod}
+                  topPersonnelRows={overviewTopPersonnelRows}
+                  topServiceRows={overviewTopServiceRows}
+                  totals={dashboardOverviewTotals}
+                  upcomingAppointments={overviewUpcomingAppointments}
+                />
+              ) : activeSection === 'Randevu takvimi' ? (
                 <CalendarPage
                   calendarRangeLabel={calendarRangeLabel}
                   calendarSlots={calendarSlots}
+                  calendarStaffFilter={calendarStaffFilter}
+                  calendarStaffOptions={['Tum personeller', ...staffOptions]}
                   calendarView={calendarView}
                   currentMonthDate={currentMonthDate}
                   dailyAppointments={dailyAppointments}
@@ -1850,8 +2456,8 @@ export default function Home() {
                   onGoToNextCalendarRange={goToNextCalendarRange}
                   onGoToPreviousCalendarRange={goToPreviousCalendarRange}
                   onOpenAppointmentModal={openAppointmentModal}
-                  onPlaceholderAction={handlePlaceholderAction}
                   onRefreshAppointments={() => void getAppointments()}
+                  onSelectCalendarStaff={setCalendarStaffFilter}
                   onSelectToday={() => setCalendarDate(getTodayDateInputValue())}
                   onStartEditingNote={startEditingNote}
                   setIsCalendarViewMenuOpen={setIsCalendarViewMenuOpen}
@@ -1870,7 +2476,6 @@ export default function Home() {
                 <CashReportPage
                   message={message}
                   onPeriodChange={setCashReportPeriod}
-                  onPlaceholderAction={handlePlaceholderAction}
                   onToggleSection={toggleCashReportSection}
                   openCashReportSections={openCashReportSections}
                   period={cashReportPeriod}
@@ -1879,6 +2484,7 @@ export default function Home() {
               ) : activeSection === 'Personel raporu' ? (
                 <PersonnelReportPage
                   message={message}
+                  onOpenPersonnelDetail={openPersonnelDetailModal}
                   onPeriodChange={setCashReportPeriod}
                   onRefreshReport={() => {
                     void getAppointments()
@@ -1907,6 +2513,7 @@ export default function Home() {
                   period={cashReportPeriod}
                   personnelRows={personnelReportRows}
                   productRows={productRows}
+                  salesTimelineRows={salesTimelineRows}
                   serviceRows={serviceRows}
                   targetValue={salesReportTarget}
                   targetValueNumeric={salesReportTargetValue}
@@ -1924,6 +2531,8 @@ export default function Home() {
                 <ProductsPage
                   message={message}
                   onDeleteProduct={deleteProduct}
+                  onEditProduct={openProductModal}
+                  onOpenProductHistory={openProductHistoryModal}
                   onOpenProductModal={openProductModal}
                   onRefreshProducts={() => void getProducts()}
                   products={products}
@@ -1931,27 +2540,23 @@ export default function Home() {
               ) : (
                 <AppointmentsPage
                   appointmentRows={appointmentRows}
-                  editingContent={editingContent}
-                  editingNoteId={editingNoteId}
                   message={message}
-                  onCancelEditingNote={cancelEditingNote}
-                  onChangeEditingContent={setEditingContent}
                   onDeleteNote={deleteNote}
                   onOpenAppointmentClosingModal={openAppointmentClosingModal}
                   onPlaceholderAction={handlePlaceholderAction}
                   onRefreshAppointments={() => void getAppointments()}
                   onStartEditingNote={startEditingNote}
-                  onUpdateNote={updateNote}
                 />
               )}
 
               <AppointmentModal
                 draft={appointmentDraft}
+                isEditing={editingAppointmentId !== null}
                 isOpen={isAppointmentModalOpen}
                 loading={loading}
                 onClose={closeAppointmentModal}
                 onDraftChange={setAppointmentDraft}
-                onSubmit={addNote}
+                onSubmit={saveAppointment}
               />
 
               <CustomerModal
@@ -1966,6 +2571,7 @@ export default function Home() {
 
               <ProductModal
                 draft={productDraft}
+                isEditing={editingProductId !== null}
                 isOpen={isProductModalOpen}
                 loading={loading}
                 onClose={closeProductModal}
@@ -1998,7 +2604,23 @@ export default function Home() {
                 loading={loading}
                 onClose={closeAppointmentClosingModal}
                 onDraftChange={setAppointmentClosingDraft}
+                productOptions={appointmentClosingProductOptions}
                 onSubmit={closeAppointment}
+              />
+
+              <PersonnelDetailModal
+                entries={activePersonnelDetailEntries}
+                isOpen={isPersonnelDetailModalOpen}
+                onClose={closePersonnelDetailModal}
+                period={cashReportPeriod}
+                staffRow={activePersonnelDetailRow}
+              />
+
+              <ProductHistoryModal
+                entries={activeProductHistoryEntries}
+                isOpen={isProductHistoryModalOpen}
+                onClose={closeProductHistoryModal}
+                productName={activeProductName}
               />
             </div>
           </section>

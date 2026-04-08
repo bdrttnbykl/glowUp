@@ -10,6 +10,7 @@ import { formatCurrencyValue } from '@/app/_home/utils'
 
 type PersonnelReportPageProps = {
   message: string
+  onOpenPersonnelDetail: (staffName: string) => void
   onPeriodChange: (value: CashReportPeriod) => void
   onRefreshReport: () => void
   period: CashReportPeriod
@@ -18,6 +19,7 @@ type PersonnelReportPageProps = {
 
 export function PersonnelReportPage({
   message,
+  onOpenPersonnelDetail,
   onPeriodChange,
   onRefreshReport,
   period,
@@ -142,7 +144,11 @@ export function PersonnelReportPage({
                   return (
                     <tr key={item.staff} className="border-b border-slate-100">
                       <td className="px-4 py-5">
-                        <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenPersonnelDetail(item.staff)}
+                          className="flex items-center gap-3 text-left transition hover:opacity-85"
+                        >
                           <span
                             className={`flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-semibold ${
                               index === 0 && item.totalRevenue > 0
@@ -155,10 +161,10 @@ export function PersonnelReportPage({
                           <div>
                             <div className="font-medium text-slate-800">{item.staff}</div>
                             <div className="text-sm text-slate-400">
-                              {item.totalTransactions > 0 ? 'Aktif' : 'Kayit yok'}
+                              {item.totalTransactions > 0 ? 'Detayi gor' : 'Kayit yok'}
                             </div>
                           </div>
-                        </div>
+                        </button>
                       </td>
                       <td className="px-4 py-5">{item.completedAppointments}</td>
                       <td className="px-4 py-5">{formatCurrencyValue(item.appointmentRevenue)}</td>

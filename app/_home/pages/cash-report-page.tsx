@@ -6,10 +6,10 @@ import {
   DashboardSectionCard,
 } from '@/app/_home/components/dashboard-page-shell'
 import type { CashReportPeriod, CashReportSection } from '@/app/_home/types'
+import { downloadPdfFile } from '@/app/_home/utils'
 
 type CashReportPageProps = {
   message: string
-  onPlaceholderAction: (label: string) => void
   onPeriodChange: (value: CashReportPeriod) => void
   onToggleSection: (key: string) => void
   openCashReportSections: string[]
@@ -19,7 +19,6 @@ type CashReportPageProps = {
 
 export function CashReportPage({
   message,
-  onPlaceholderAction,
   onPeriodChange,
   onToggleSection,
   openCashReportSections,
@@ -29,6 +28,24 @@ export function CashReportPage({
   const totalValue = sections.find((section) => section.key === 'total')?.value || '0,00 TL'
   const incomeValue = sections.find((section) => section.key === 'income')?.value || '0,00 TL'
   const expenseValue = sections.find((section) => section.key === 'expense')?.value || '0,00 TL'
+  const handleDownload = () => {
+    const rows = [
+      ['Bolum', 'Kalem', 'Tutar'],
+      ...sections.flatMap((section) => {
+        if (section.items.length === 0) {
+          return [[section.label, 'Genel toplam', section.value]]
+        }
+
+        return section.items.map(([label, value]) => [section.label, label, value])
+      }),
+    ]
+
+    downloadPdfFile({
+      filename: 'kasa-raporu.pdf',
+      rows,
+      title: `Kasa Raporu - ${period}`,
+    })
+  }
 
   return (
     <DashboardPageShell>
@@ -48,7 +65,7 @@ export function CashReportPage({
             </select>
             <button
               type="button"
-              onClick={() => onPlaceholderAction('Kasa raporu indir')}
+              onClick={handleDownload}
               className="rounded-2xl bg-[#537bb4] px-5 py-3 text-sm font-medium text-white"
             >
               Indir
