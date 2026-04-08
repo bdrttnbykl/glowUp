@@ -15,6 +15,7 @@ import {
 import { DashboardBreadcrumb } from '@/app/_home/components/dashboard-breadcrumb'
 import { DashboardHeader } from '@/app/_home/components/dashboard-header'
 import { DashboardSidebar } from '@/app/_home/components/dashboard-sidebar'
+import { AccountSettingsModal } from '@/app/_home/modals/account-settings-modal'
 import { AppointmentClosingModal } from '@/app/_home/modals/appointment-closing-modal'
 import { AppointmentModal } from '@/app/_home/modals/appointment-modal'
 import { CustomerModal } from '@/app/_home/modals/customer-modal'
@@ -80,6 +81,9 @@ type NormalizedAppointmentProductSale = {
   price: string
   quantity: number
 }
+
+const defaultBrandName = 'glowUp'
+const defaultBusinessName = 'Pera Beauty House'
 
 const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date()) => {
   const periodStart = new Date(referenceDate)
@@ -267,10 +271,15 @@ export default function Home() {
   const [isAppointmentClosingModalOpen, setIsAppointmentClosingModalOpen] = useState(false)
   const [isPersonnelDetailModalOpen, setIsPersonnelDetailModalOpen] = useState(false)
   const [isProductHistoryModalOpen, setIsProductHistoryModalOpen] = useState(false)
+  const [isAccountSettingsModalOpen, setIsAccountSettingsModalOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [brandName, setBrandName] = useState(defaultBrandName)
+  const [businessName, setBusinessName] = useState(defaultBusinessName)
+  const [accountBrandNameDraft, setAccountBrandNameDraft] = useState(defaultBrandName)
+  const [accountBusinessNameDraft, setAccountBusinessNameDraft] = useState(defaultBusinessName)
   const [appointmentDraft, setAppointmentDraft] = useState<AppointmentDraft>(
     defaultAppointmentDraft
   )
@@ -301,7 +310,26 @@ export default function Home() {
   const [message, setMessage] = useState('')
 
   const handlePlaceholderAction = (label: string) => {
+    if (label === 'Ayar') {
+      setIsAccountSettingsModalOpen(true)
+      setMessage('')
+      return
+    }
+
     setMessage(`${label} ozelligi hazirlaniyor.`)
+  }
+
+  const openAccountSettingsModal = () => {
+    setAccountBrandNameDraft(brandName)
+    setAccountBusinessNameDraft(businessName)
+    setIsAccountSettingsModalOpen(true)
+    setMessage('')
+  }
+
+  const closeAccountSettingsModal = () => {
+    setAccountBrandNameDraft(brandName)
+    setAccountBusinessNameDraft(businessName)
+    setIsAccountSettingsModalOpen(false)
   }
 
   const handleSectionChange = (section: string) => {
@@ -520,6 +548,10 @@ export default function Home() {
     if (error || !data.user) {
       setUserId('')
       setUserEmail('')
+      setBrandName(defaultBrandName)
+      setBusinessName(defaultBusinessName)
+      setAccountBrandNameDraft(defaultBrandName)
+      setAccountBusinessNameDraft(defaultBusinessName)
       setAppointments([])
       setCustomers([])
       setProducts([])
@@ -529,6 +561,30 @@ export default function Home() {
 
     setUserId(data.user.id)
     setUserEmail(data.user.email || '')
+    setBrandName(
+      typeof data.user.user_metadata?.brand_name === 'string' &&
+        data.user.user_metadata.brand_name.trim()
+        ? data.user.user_metadata.brand_name.trim()
+        : defaultBrandName
+    )
+    setBusinessName(
+      typeof data.user.user_metadata?.business_name === 'string' &&
+        data.user.user_metadata.business_name.trim()
+        ? data.user.user_metadata.business_name.trim()
+        : defaultBusinessName
+    )
+    setAccountBrandNameDraft(
+      typeof data.user.user_metadata?.brand_name === 'string' &&
+        data.user.user_metadata.brand_name.trim()
+        ? data.user.user_metadata.brand_name.trim()
+        : defaultBrandName
+    )
+    setAccountBusinessNameDraft(
+      typeof data.user.user_metadata?.business_name === 'string' &&
+        data.user.user_metadata.business_name.trim()
+        ? data.user.user_metadata.business_name.trim()
+        : defaultBusinessName
+    )
   }
 
   const getAppointments = async () => {
@@ -658,6 +714,10 @@ export default function Home() {
     setPassword('')
     setUserId('')
     setUserEmail('')
+    setBrandName(defaultBrandName)
+    setBusinessName(defaultBusinessName)
+    setAccountBrandNameDraft(defaultBrandName)
+    setAccountBusinessNameDraft(defaultBusinessName)
     setAppointmentDraft(defaultAppointmentDraft)
     setAppointments([])
     setCustomers([])
@@ -669,6 +729,7 @@ export default function Home() {
     setEditingProductId(null)
     setPackageSaleDraft(defaultPackageSaleDraft)
     setEditingAppointmentId(null)
+    setIsAccountSettingsModalOpen(false)
 
     const { error } = await supabase.auth.signOut({ scope: 'local' })
 
@@ -685,6 +746,77 @@ export default function Home() {
     }
 
     setLoggingOut(false)
+    setLoading(false)
+  }
+
+  const saveAccountSettings = async () => {
+    const trimmedBrandName = accountBrandNameDraft.trim()
+    const trimmedBusinessName = accountBusinessNameDraft.trim()
+
+    if (!trimmedBrandName) {
+      setMessage('Marka adini gir.')
+      return
+    }
+
+    if (!trimmedBusinessName) {
+      setMessage('Isletme adini gir.')
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setMessage('Aktif oturum bulunamadi. Tekrar giris yap.')
+      setLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        ...user.user_metadata,
+        brand_name: trimmedBrandName,
+        business_name: trimmedBusinessName,
+      },
+    })
+
+    if (error) {
+      setMessage(error.message)
+      setLoading(false)
+      return
+    }
+
+    setBrandName(
+      typeof data.user?.user_metadata?.brand_name === 'string' &&
+        data.user.user_metadata.brand_name.trim()
+        ? data.user.user_metadata.brand_name.trim()
+        : trimmedBrandName
+    )
+    setBusinessName(
+      typeof data.user?.user_metadata?.business_name === 'string' &&
+        data.user.user_metadata.business_name.trim()
+        ? data.user.user_metadata.business_name.trim()
+        : trimmedBusinessName
+    )
+    setAccountBrandNameDraft(
+      typeof data.user?.user_metadata?.brand_name === 'string' &&
+        data.user.user_metadata.brand_name.trim()
+        ? data.user.user_metadata.brand_name.trim()
+        : trimmedBrandName
+    )
+    setAccountBusinessNameDraft(
+      typeof data.user?.user_metadata?.business_name === 'string' &&
+        data.user.user_metadata.business_name.trim()
+        ? data.user.user_metadata.business_name.trim()
+        : trimmedBusinessName
+    )
+    setIsAccountSettingsModalOpen(false)
+    setMessage('Hesap ayarlari guncellendi.')
     setLoading(false)
   }
 
@@ -2447,8 +2579,11 @@ export default function Home() {
 
           <section className="min-w-0 flex-1 overflow-x-hidden lg:pl-[74px]">
             <DashboardHeader
+              brandName={brandName}
+              businessName={businessName}
               isQuickActionsOpen={isQuickActionsOpen}
               onOpenAppointmentModal={openAppointmentModal}
+              onOpenAccountSettings={openAccountSettingsModal}
               onOpenCustomerModal={openCustomerModal}
               onOpenPackageSaleModal={openPackageSaleModal}
               onOpenProductModal={openProductModal}
@@ -2657,6 +2792,18 @@ export default function Home() {
                 isOpen={isProductHistoryModalOpen}
                 onClose={closeProductHistoryModal}
                 productName={activeProductName}
+              />
+
+              <AccountSettingsModal
+                brandName={accountBrandNameDraft}
+                businessName={accountBusinessNameDraft}
+                email={userEmail}
+                isOpen={isAccountSettingsModalOpen}
+                loading={loading}
+                onBrandNameChange={setAccountBrandNameDraft}
+                onBusinessNameChange={setAccountBusinessNameDraft}
+                onClose={closeAccountSettingsModal}
+                onSubmit={saveAccountSettings}
               />
             </div>
           </section>

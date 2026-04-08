@@ -25,10 +25,10 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   return (
     <aside className="group fixed left-0 top-0 z-30 hidden h-screen w-[74px] flex-col justify-between overflow-hidden bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px] lg:flex">
-      <div className="relative flex-1 px-3 py-5">
+      <div className="relative min-h-0 flex-1 px-3 py-5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
 
-        <div className="relative flex h-full flex-col items-center">
+        <div className="relative flex h-full min-h-0 flex-col items-center">
           <div className="mb-8 flex w-full items-center justify-center overflow-hidden">
             <div className="flex h-12 w-[56px] shrink-0 items-center justify-center transition-[width] duration-300 ease-out group-hover:w-[146px]">
               <Image
@@ -40,7 +40,7 @@ export function DashboardSidebar({
             </div>
           </div>
 
-          <nav className="flex w-full flex-col gap-4">
+          <nav className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto pr-1">
             {sidebarItems.map((item) => {
               const active = item.label === activeSection
               const isReportsItem = item.label === 'Raporlar'

@@ -3,7 +3,10 @@ import { SidebarIcon } from '@/app/_home/sidebar-icon'
 
 type DashboardHeaderProps = {
   isQuickActionsOpen: boolean
+  brandName: string
+  businessName: string
   onOpenAppointmentModal: () => void
+  onOpenAccountSettings: () => void
   onOpenCustomerModal: () => void
   onOpenPackageSaleModal: () => void
   onOpenProductModal: () => void
@@ -15,7 +18,10 @@ type DashboardHeaderProps = {
 
 export function DashboardHeader({
   isQuickActionsOpen,
+  brandName,
+  businessName,
   onOpenAppointmentModal,
+  onOpenAccountSettings,
   onOpenCustomerModal,
   onOpenPackageSaleModal,
   onOpenProductModal,
@@ -57,7 +63,7 @@ export function DashboardHeader({
             </button>
             <button
               type="button"
-              onClick={() => onPlaceholderAction('Ayar')}
+              onClick={onOpenAccountSettings}
               className="text-sm font-medium transition hover:text-slate-700"
             >
               Ayar
@@ -115,11 +121,18 @@ export function DashboardHeader({
 
         <div className="flex items-center justify-center gap-3 xl:ml-auto xl:justify-end">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white">
-            {userEmail.slice(0, 1).toUpperCase()}
+            {(brandName || userEmail).slice(0, 1).toUpperCase()}
           </div>
           <div>
-            <p className="text-[15px] font-semibold text-slate-700">glowUp</p>
-            <p className="text-sm text-slate-400">Pera Beauty House</p>
+            <p className="text-[15px] font-semibold text-slate-700">{brandName}</p>
+            <p className="text-sm text-slate-400">{businessName}</p>
+            <button
+              type="button"
+              onClick={onOpenAccountSettings}
+              className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-[#537bb4] transition hover:text-slate-700"
+            >
+              Hesap ayarlari
+            </button>
           </div>
         </div>
       </div>
