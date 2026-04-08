@@ -67,13 +67,17 @@ export function DashboardSidebar({
                       <span className="translate-x-2 whitespace-nowrap text-left text-[17px] opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
                         {item.label}
                       </span>
-                      <span className="ml-auto mr-4 hidden text-lg group-hover:block">
+                      <span
+                        className={`ml-auto mr-4 text-lg transition ${
+                          isReportMenuOpen ? 'block' : 'hidden group-hover:block'
+                        }`}
+                      >
                         {isReportMenuOpen ? '^' : 'v'}
                       </span>
                     </button>
 
                     {isReportMenuOpen && (
-                      <div className="hidden space-y-1 bg-black/12 px-3 py-3 group-hover:block">
+                      <div className="block space-y-1 bg-black/12 px-3 py-3">
                         {reportSidebarItems.map((reportItem) => (
                           <button
                             key={reportItem.label}
