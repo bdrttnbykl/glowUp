@@ -256,6 +256,7 @@ export default function Home() {
   const [calendarStaffFilter, setCalendarStaffFilter] = useState('Tum personeller')
   const [cashReportPeriod, setCashReportPeriod] = useState<CashReportPeriod>('Bu ay')
   const [salesReportTarget, setSalesReportTarget] = useState('100000')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false)
   const [openCashReportSections, setOpenCashReportSections] = useState<string[]>([
     'total',
@@ -333,6 +334,7 @@ export default function Home() {
   }
 
   const handleSectionChange = (section: string) => {
+    setIsSidebarOpen(false)
     setActiveSection(section)
     if (section !== 'Raporlar') {
       setIsReportMenuOpen(false)
@@ -355,6 +357,7 @@ export default function Home() {
   }
 
   const handleReportSectionChange = (section: string) => {
+    setIsSidebarOpen(false)
     setActiveSection(section)
     setIsReportMenuOpen(true)
     setMessage(
@@ -711,6 +714,7 @@ export default function Home() {
   }
 
   const handleLogout = async () => {
+    setIsSidebarOpen(false)
     setLoggingOut(true)
     setLoading(true)
     setMessage('')
@@ -2573,8 +2577,10 @@ export default function Home() {
         <div className="flex min-h-screen overflow-x-hidden">
           <DashboardSidebar
             activeSection={activeSection}
+            isOpen={isSidebarOpen}
             isReportMenuOpen={isReportMenuOpen}
             loading={loading}
+            onClose={() => setIsSidebarOpen(false)}
             onLogout={handleLogout}
             onSelectReportSection={handleReportSectionChange}
             onSelectSection={handleSectionChange}
@@ -2593,6 +2599,7 @@ export default function Home() {
               onOpenProductModal={openProductModal}
               onPlaceholderAction={handlePlaceholderAction}
               onQuickActionSectionSelect={handleQuickActionSectionSelect}
+              onToggleSidebar={() => setIsSidebarOpen((current) => !current)}
               onToggleQuickActions={() => setIsQuickActionsOpen((current) => !current)}
               userEmail={userEmail}
             />
