@@ -6,7 +6,6 @@ import salonAppyLogo from '@/img/glowup-wordmark-transparent-v2.png'
 
 type DashboardSidebarProps = {
   activeSection: string
-  isDrawerMode: boolean
   isOpen: boolean
   isReportMenuOpen: boolean
   loading: boolean
@@ -19,7 +18,6 @@ type DashboardSidebarProps = {
 
 export function DashboardSidebar({
   activeSection,
-  isDrawerMode,
   isOpen,
   isReportMenuOpen,
   loading,
@@ -46,7 +44,7 @@ export function DashboardSidebar({
 
   return (
     <>
-      {isDrawerMode && isOpen && (
+      {isOpen && (
         <button
           type="button"
           aria-label="Sidebari kapat"
@@ -56,11 +54,9 @@ export function DashboardSidebar({
       )}
 
       <aside
-        className={`fixed left-0 top-0 flex h-screen w-[300px] flex-col overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white ${
-          isDrawerMode
-            ? `${isOpen ? 'translate-x-0' : '-translate-x-full'} z-40 shadow-[0_28px_60px_rgba(15,23,42,0.34)] transition-transform duration-300 ease-out`
-            : 'z-30 translate-x-0 shadow-none'
-        }`}
+        className={`fixed left-0 top-0 z-40 flex h-screen w-[300px] flex-col overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white shadow-[0_28px_60px_rgba(15,23,42,0.34)] transition-transform duration-300 ease-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:z-30 lg:translate-x-0 lg:shadow-none`}
       >
         <div className="relative min-h-0 flex-1 px-3 py-5">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
@@ -76,15 +72,13 @@ export function DashboardSidebar({
                 />
               </div>
 
-              {isDrawerMode && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm text-white/80 transition hover:bg-white/15"
-                >
-                  X
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm text-white/80 transition hover:bg-white/15 lg:hidden"
+              >
+                X
+              </button>
             </div>
 
             <nav className="flex min-h-0 w-full flex-1 flex-col gap-4 pr-1">
