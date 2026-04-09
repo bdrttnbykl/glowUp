@@ -2581,7 +2581,7 @@ export default function Home() {
             onToggleReportMenu={handleReportMenuToggle}
           />
 
-          <section className="min-w-0 flex-1 overflow-x-hidden lg:pl-[300px]">
+          <section className="min-w-0 flex-1 overflow-x-hidden pl-[74px]">
             <DashboardHeader
               brandName={brandName}
               businessName={businessName}

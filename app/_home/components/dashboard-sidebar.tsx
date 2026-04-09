@@ -32,23 +32,23 @@ export function DashboardSidebar({
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-30 flex h-screen w-[300px] flex-col overflow-x-hidden overflow-y-auto bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white">
-      <div className="relative min-h-0 flex-1 px-3 py-5">
+    <aside className="group fixed left-0 top-0 z-30 flex h-dvh w-[74px] flex-col overflow-y-scroll overflow-x-hidden overscroll-contain bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px]">
+      <div className="relative px-3 py-5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
 
-        <div className="relative flex h-full min-h-0 flex-col items-center">
-          <div className="mb-8 flex w-full items-center justify-center overflow-hidden px-1">
-            <div className="flex h-12 w-[146px] shrink-0 items-center justify-center">
+        <div className="relative flex min-h-full flex-col items-center">
+          <div className="mb-8 flex w-full items-center justify-center overflow-hidden">
+            <div className="flex h-12 w-[56px] shrink-0 items-center justify-center transition-[width] duration-300 ease-out group-hover:w-[146px]">
               <Image
                 src={salonAppyLogo}
                 alt="glowup logo"
-                className="h-auto w-[132px] object-contain drop-shadow-[0_12px_25px_rgba(0,0,0,0.25)]"
+                className="h-auto w-[46px] object-contain drop-shadow-[0_12px_25px_rgba(0,0,0,0.25)] transition-[width] duration-300 ease-out group-hover:w-[132px]"
                 priority
               />
             </div>
           </div>
 
-          <nav className="flex min-h-0 w-full flex-1 flex-col gap-4 pr-1">
+          <nav className="flex w-full flex-col gap-4 pr-1">
             {sidebarItems.map((item) => {
               const active = item.label === activeSection
               const isReportsItem = item.label === 'Raporlar'
@@ -68,16 +68,20 @@ export function DashboardSidebar({
                           ? 'bg-[#afcb8f] text-slate-700'
                           : 'text-white/95 hover:bg-white/10'
                       }`}
-                    >
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center">
-                        <SidebarIcon name={item.icon} />
-                      </span>
-                      <span className="whitespace-nowrap text-left text-[17px]">
-                        {item.label}
-                      </span>
-                      <span className="ml-auto mr-4 text-lg">
-                        {isReportMenuOpen ? '^' : 'v'}
-                      </span>
+                      >
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center">
+                          <SidebarIcon name={item.icon} />
+                        </span>
+                        <span className="translate-x-2 whitespace-nowrap text-left text-[17px] opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                          {item.label}
+                        </span>
+                        <span
+                          className={`ml-auto mr-4 text-lg transition ${
+                            isReportMenuOpen ? 'block' : 'hidden group-hover:block'
+                          }`}
+                        >
+                          {isReportMenuOpen ? '^' : 'v'}
+                        </span>
                     </button>
 
                     {isReportMenuOpen && (
@@ -116,7 +120,7 @@ export function DashboardSidebar({
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center">
                     <SidebarIcon name={item.icon} />
                   </span>
-                  <span className="whitespace-nowrap text-left text-[17px]">
+                  <span className="translate-x-2 whitespace-nowrap text-left text-[17px] opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
                     {item.label}
                   </span>
                 </button>
@@ -133,18 +137,22 @@ export function DashboardSidebar({
               <span className="flex h-12 w-12 shrink-0 items-center justify-center text-base">
                 {loading ? '...' : 'X'}
               </span>
-              <span className="whitespace-nowrap text-sm">Cikis</span>
+              <span className="translate-x-2 whitespace-nowrap text-sm opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                Cikis
+              </span>
             </button>
           </nav>
         </div>
       </div>
 
-      <div className="sticky bottom-0 border-t border-white/10 bg-black/35 px-2 py-4 backdrop-blur-sm">
-        <div className="flex items-center gap-3 overflow-hidden">
+      <div className="border-t border-white/10 bg-black/35 px-2 py-4 backdrop-blur-sm">
+        <div className="flex items-center justify-center gap-3 overflow-hidden group-hover:justify-start">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#62b0ff] text-sm font-semibold text-slate-950">
             10
           </div>
-          <div className="whitespace-nowrap text-sm">10 C Bulutlu</div>
+          <div className="translate-x-2 whitespace-nowrap text-sm opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+            10 C Bulutlu
+          </div>
         </div>
       </div>
     </aside>
