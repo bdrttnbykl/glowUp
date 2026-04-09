@@ -257,6 +257,7 @@ export default function Home() {
   const [cashReportPeriod, setCashReportPeriod] = useState<CashReportPeriod>('Bu ay')
   const [salesReportTarget, setSalesReportTarget] = useState('100000')
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [usesDrawerSidebar, setUsesDrawerSidebar] = useState(false)
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false)
   const [openCashReportSections, setOpenCashReportSections] = useState<string[]>([
     'total',
@@ -319,6 +320,32 @@ export default function Home() {
 
     setMessage(`${label} ozelligi hazirlaniyor.`)
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const mediaQuery = window.matchMedia(
+      '(max-width: 1023px), (hover: none), (pointer: coarse)'
+    )
+
+    const syncSidebarMode = () => {
+      const nextUsesDrawerSidebar = mediaQuery.matches
+      setUsesDrawerSidebar(nextUsesDrawerSidebar)
+
+      if (!nextUsesDrawerSidebar) {
+        setIsSidebarOpen(false)
+      }
+    }
+
+    syncSidebarMode()
+    mediaQuery.addEventListener('change', syncSidebarMode)
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncSidebarMode)
+    }
+  }, [])
 
   const openAccountSettingsModal = () => {
     setAccountBrandNameDraft(brandName)
@@ -2577,6 +2604,7 @@ export default function Home() {
         <div className="flex min-h-screen overflow-x-hidden">
           <DashboardSidebar
             activeSection={activeSection}
+            isDrawerMode={usesDrawerSidebar}
             isOpen={isSidebarOpen}
             isReportMenuOpen={isReportMenuOpen}
             loading={loading}
@@ -2587,10 +2615,15 @@ export default function Home() {
             onToggleReportMenu={handleReportMenuToggle}
           />
 
-          <section className="min-w-0 flex-1 overflow-x-hidden lg:pl-[74px]">
+          <section
+            className={`min-w-0 flex-1 overflow-x-hidden ${
+              usesDrawerSidebar ? '' : 'pl-[300px]'
+            }`}
+          >
             <DashboardHeader
               brandName={brandName}
               businessName={businessName}
+              isDrawerMode={usesDrawerSidebar}
               isQuickActionsOpen={isQuickActionsOpen}
               onOpenAppointmentModal={openAppointmentModal}
               onOpenAccountSettings={openAccountSettingsModal}

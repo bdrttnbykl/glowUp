@@ -5,6 +5,7 @@ type DashboardHeaderProps = {
   isQuickActionsOpen: boolean
   brandName: string
   businessName: string
+  isDrawerMode: boolean
   onOpenAppointmentModal: () => void
   onOpenAccountSettings: () => void
   onOpenCustomerModal: () => void
@@ -21,6 +22,7 @@ export function DashboardHeader({
   isQuickActionsOpen,
   brandName,
   businessName,
+  isDrawerMode,
   onOpenAppointmentModal,
   onOpenAccountSettings,
   onOpenCustomerModal,
@@ -35,25 +37,27 @@ export function DashboardHeader({
   return (
     <header className="border-b border-slate-300/80 bg-[#eef2f8] px-4 py-5 shadow-[0_8px_24px_rgba(33,45,78,0.07)] md:px-8">
       <div className="relative flex flex-col gap-4 xl:min-h-[72px] xl:justify-center">
-        <div className="flex items-center justify-between gap-3 lg:hidden">
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400"
-            aria-label="Sidebari ac"
-          >
-            <span className="flex flex-col gap-1.5">
-              <span className="block h-0.5 w-5 rounded-full bg-current" />
-              <span className="block h-0.5 w-5 rounded-full bg-current" />
-              <span className="block h-0.5 w-5 rounded-full bg-current" />
-            </span>
-          </button>
+        {isDrawerMode && (
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400"
+              aria-label="Sidebari ac"
+            >
+              <span className="flex flex-col gap-1.5">
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+                <span className="block h-0.5 w-5 rounded-full bg-current" />
+              </span>
+            </button>
 
-          <div className="text-right">
-            <p className="text-[15px] font-semibold text-slate-700">{brandName}</p>
-            <p className="text-xs text-slate-400">{businessName}</p>
+            <div className="text-right">
+              <p className="text-[15px] font-semibold text-slate-700">{brandName}</p>
+              <p className="text-xs text-slate-400">{businessName}</p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-start gap-4 xl:absolute xl:left-1/2 xl:top-1/2 xl:w-max xl:-translate-x-1/2 xl:-translate-y-1/2 xl:justify-center">
           <div className="hidden items-center rounded-xl bg-white px-4 py-3 text-slate-500 shadow-sm sm:flex">
@@ -141,22 +145,24 @@ export function DashboardHeader({
           </div>
         </div>
 
-        <div className="hidden items-center justify-center gap-3 lg:flex xl:ml-auto xl:justify-end">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white">
-            {(brandName || userEmail).slice(0, 1).toUpperCase()}
+        {!isDrawerMode && (
+          <div className="flex items-center justify-center gap-3 xl:ml-auto xl:justify-end">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white">
+              {(brandName || userEmail).slice(0, 1).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-[15px] font-semibold text-slate-700">{brandName}</p>
+              <p className="text-sm text-slate-400">{businessName}</p>
+              <button
+                type="button"
+                onClick={onOpenAccountSettings}
+                className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-[#537bb4] transition hover:text-slate-700"
+              >
+                Hesap ayarlari
+              </button>
+            </div>
           </div>
-          <div>
-            <p className="text-[15px] font-semibold text-slate-700">{brandName}</p>
-            <p className="text-sm text-slate-400">{businessName}</p>
-            <button
-              type="button"
-              onClick={onOpenAccountSettings}
-              className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-[#537bb4] transition hover:text-slate-700"
-            >
-              Hesap ayarlari
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </header>
   )
