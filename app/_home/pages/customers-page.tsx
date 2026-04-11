@@ -14,6 +14,7 @@ type CustomersPageProps = {
   customers: MergedCustomer[]
   message: string
   onEditCustomer: (customer: MergedCustomer) => void
+  onOpenMessageModal: (customer: MergedCustomer) => void
   onOpenCustomerModal: () => void
   onRefreshCustomers: () => void
 }
@@ -22,6 +23,7 @@ export function CustomersPage({
   customers,
   message,
   onEditCustomer,
+  onOpenMessageModal,
   onOpenCustomerModal,
   onRefreshCustomers,
 }: CustomersPageProps) {
@@ -41,10 +43,12 @@ export function CustomersPage({
       }
 
       const normalizedName = item.customer.toLocaleLowerCase('tr-TR')
+      const normalizedEmail = (item.email || '').toLowerCase()
       const normalizedPhone = (item.phone || '').toLocaleLowerCase('tr-TR')
 
       return (
         normalizedName.includes(normalizedSearchTerm) ||
+        normalizedEmail.includes(normalizedSearchTerm) ||
         normalizedPhone.includes(normalizedSearchTerm)
       )
     })
@@ -61,9 +65,10 @@ export function CustomersPage({
 
   const handleDownload = () => {
     const rows = [
-      ['Musteri', 'Telefon', 'Kaynak', 'Olusturulma'],
+      ['Musteri', 'Email', 'Telefon', 'Kaynak', 'Olusturulma'],
       ...filteredCustomers.map((item) => [
         item.customer,
+        item.email || '',
         item.phone || '',
         item.source === 'manual'
           ? 'Manuel'
@@ -190,6 +195,7 @@ export function CustomersPage({
             <thead className="border-b border-[#d7e0eb] bg-[#f6f9fd] text-[15px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 <th className="px-4 py-5 font-semibold">Musteri</th>
+                <th className="px-4 py-5 font-semibold">Email</th>
                 <th className="px-4 py-5 font-semibold">Telefon numarasi</th>
                 <th className="px-4 py-5 font-semibold">Kaynak</th>
                 <th className="px-4 py-5 font-semibold">Olusturulma</th>
@@ -199,7 +205,7 @@ export function CustomersPage({
             <tbody className="text-[16px] text-slate-700">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-14 text-center text-slate-400">
                     Aramana veya filtrene uyan musteri yok.
                   </td>
                 </tr>
@@ -207,6 +213,7 @@ export function CustomersPage({
                 filteredCustomers.map((item) => (
                   <tr key={`${item.source}-${item.id}`} className="border-b border-slate-100">
                     <td className="px-4 py-5 font-medium text-slate-800">{item.customer}</td>
+                    <td className="px-4 py-5">{item.email || '-'}</td>
                     <td className="px-4 py-5">{item.phone || '-'}</td>
                     <td className="px-4 py-5">
                       {item.source === 'manual'
@@ -223,7 +230,14 @@ export function CustomersPage({
                       })}
                     </td>
                     <td className="px-4 py-5">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onOpenMessageModal(item)}
+                          className="rounded-xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-[#0f766e]"
+                        >
+                          Mesaj gonder
+                        </button>
                         <button
                           type="button"
                           onClick={() => onEditCustomer(item)}

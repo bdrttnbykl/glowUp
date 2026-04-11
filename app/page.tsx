@@ -9,6 +9,7 @@ import {
   defaultPackageSessionDraft,
   defaultProductDraft,
   monthLabels,
+  sidebarItems,
   staffOptions,
   weekDayLongLabels,
 } from '@/app/_home/constants'
@@ -19,12 +20,14 @@ import { AccountSettingsModal } from '@/app/_home/modals/account-settings-modal'
 import { AppointmentClosingModal } from '@/app/_home/modals/appointment-closing-modal'
 import { AppointmentModal } from '@/app/_home/modals/appointment-modal'
 import { CustomerModal } from '@/app/_home/modals/customer-modal'
+import { MessageModal } from '@/app/_home/modals/message-modal'
 import { PackageSaleModal } from '@/app/_home/modals/package-sale-modal'
 import { PackageSessionModal } from '@/app/_home/modals/package-session-modal'
 import { PersonnelDetailModal } from '@/app/_home/modals/personnel-detail-modal'
 import { ProductHistoryModal } from '@/app/_home/modals/product-history-modal'
 import { ProductModal } from '@/app/_home/modals/product-modal'
 import { CalendarPage } from '@/app/_home/pages/calendar-page'
+import { AccessManagementPage } from '@/app/_home/pages/access-management-page'
 import { AppointmentsPage } from '@/app/_home/pages/appointments-page'
 import { CashReportPage } from '@/app/_home/pages/cash-report-page'
 import { CustomersPage } from '@/app/_home/pages/customers-page'
@@ -44,20 +47,27 @@ import type {
   CashReportSection,
   Customer,
   CustomerDraft,
+  ManagedInvite,
+  ManagedUser,
+  MessageChannel,
   MergedCustomer,
   PackageSale,
   PackageSaleDraft,
   PackageSaleRow,
   PackageSessionDraft,
+  PersonnelCompensationRow,
   PersonnelDetailEntry,
   PersonnelReportRow,
   Product,
   ProductDraft,
+  StaffCompensationSetting,
+  UserRole,
 } from '@/app/_home/types'
 import {
   addDays,
   addMonths,
   createDateFromIso,
+  downloadPdfFile,
   formatDisplayDate,
   formatCurrencyValue,
   formatDateIso,
@@ -82,8 +92,29 @@ type NormalizedAppointmentProductSale = {
   quantity: number
 }
 
+type StaffCompensationDraft = {
+  bonusRate: string
+  fixedSalary: string
+}
+
+const getPreferredMessageChannel = (
+  customer?: Pick<MergedCustomer, 'email' | 'phone'> | null
+): MessageChannel => {
+  return customer?.phone?.trim() ? 'sms' : 'email'
+}
+
+const createDefaultMessageBody = (customerName: string) => {
+  return `Merhaba ${customerName}, `
+}
+
 const defaultBrandName = 'glowUp'
 const defaultBusinessName = 'Pera Beauty House'
+const inviteCodeInputPattern = /[^a-z0-9]/gi
+
+type RegisterStep = 'create-password' | 'verify-invite'
+
+const normalizeInviteCodeInput = (value: string) =>
+  value.replace(inviteCodeInputPattern, '').toUpperCase()
 
 const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date()) => {
   const periodStart = new Date(referenceDate)
@@ -250,11 +281,16 @@ export default function Home() {
     'Bu ay'
   )
   const [mode, setMode] = useState<AuthMode>('login')
+  const [registerStep, setRegisterStep] = useState<RegisterStep>('verify-invite')
   const [activeSection, setActiveSection] = useState('Randevular')
   const [calendarView, setCalendarView] = useState('Gunluk gorunum')
   const [calendarDate, setCalendarDate] = useState(getTodayDateInputValue())
   const [calendarStaffFilter, setCalendarStaffFilter] = useState('Tum personeller')
   const [cashReportPeriod, setCashReportPeriod] = useState<CashReportPeriod>('Bu ay')
+  const [cashReportStartDate, setCashReportStartDate] = useState('')
+  const [cashReportEndDate, setCashReportEndDate] = useState('')
+  const [personnelReportStartDate, setPersonnelReportStartDate] = useState('')
+  const [personnelReportEndDate, setPersonnelReportEndDate] = useState('')
   const [salesReportTarget, setSalesReportTarget] = useState('100000')
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false)
   const [openCashReportSections, setOpenCashReportSections] = useState<string[]>([
@@ -272,14 +308,26 @@ export default function Home() {
   const [isPersonnelDetailModalOpen, setIsPersonnelDetailModalOpen] = useState(false)
   const [isProductHistoryModalOpen, setIsProductHistoryModalOpen] = useState(false)
   const [isAccountSettingsModalOpen, setIsAccountSettingsModalOpen] = useState(false)
+  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false)
   const [email, setEmail] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [userRole, setUserRole] = useState<UserRole>('member')
   const [brandName, setBrandName] = useState(defaultBrandName)
   const [businessName, setBusinessName] = useState(defaultBusinessName)
   const [accountBrandNameDraft, setAccountBrandNameDraft] = useState(defaultBrandName)
   const [accountBusinessNameDraft, setAccountBusinessNameDraft] = useState(defaultBusinessName)
+  const [inviteEmailDraft, setInviteEmailDraft] = useState('')
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
+  const [managedInvites, setManagedInvites] = useState<ManagedInvite[]>([])
+  const [lastCreatedInvite, setLastCreatedInvite] = useState<{
+    code: string
+    email: string
+    expiresAt: string
+  } | null>(null)
   const [appointmentDraft, setAppointmentDraft] = useState<AppointmentDraft>(
     defaultAppointmentDraft
   )
@@ -287,6 +335,12 @@ export default function Home() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [packageSales, setPackageSales] = useState<PackageSale[]>([])
+  const [staffCompensationSettings, setStaffCompensationSettings] = useState<
+    StaffCompensationSetting[]
+  >([])
+  const [staffCompensationDrafts, setStaffCompensationDrafts] = useState<
+    Record<string, StaffCompensationDraft>
+  >({})
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(defaultCustomerDraft)
   const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null)
   const [productDraft, setProductDraft] = useState<ProductDraft>(defaultProductDraft)
@@ -300,6 +354,7 @@ export default function Home() {
   const [activePackageSaleId, setActivePackageSaleId] = useState<number | null>(null)
   const [activePersonnelName, setActivePersonnelName] = useState<string | null>(null)
   const [activeProductName, setActiveProductName] = useState<string | null>(null)
+  const [activeMessageCustomer, setActiveMessageCustomer] = useState<MergedCustomer | null>(null)
   const [closingAppointmentId, setClosingAppointmentId] = useState<number | null>(null)
   const [editingAppointmentId, setEditingAppointmentId] = useState<number | null>(null)
   const [appointmentClosingDraft, setAppointmentClosingDraft] = useState<AppointmentClosingDraft>(
@@ -307,7 +362,16 @@ export default function Home() {
   )
   const [loading, setLoading] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [isAccessLoading, setIsAccessLoading] = useState(false)
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false)
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
+  const [revokingInviteId, setRevokingInviteId] = useState<number | null>(null)
+  const [messageChannel, setMessageChannel] = useState<MessageChannel>('sms')
+  const [messageBody, setMessageBody] = useState('')
+  const [messageSubject, setMessageSubject] = useState('')
   const [message, setMessage] = useState('')
+  const [savingCompensationStaff, setSavingCompensationStaff] = useState<string | null>(null)
+  const [sendingMessage, setSendingMessage] = useState(false)
 
   const handlePlaceholderAction = (label: string) => {
     if (label === 'Ayar') {
@@ -342,7 +406,9 @@ export default function Home() {
         section === 'Randevular' ||
         section === 'Randevu takvimi' ||
         section === 'Urun ve hizmet' ||
-        section === 'Paket satislari'
+        section === 'Paket satislari' ||
+        section === 'Musteriler' ||
+        section === 'Kullanicilar'
         ? ''
         : `${section} bolumu hazirlaniyor.`
     )
@@ -407,6 +473,7 @@ export default function Home() {
       customer
         ? {
             customer: customer.customer,
+            email: (customer.email || '').trim(),
             phone: (customer.phone || '').trim(),
           }
         : defaultCustomerDraft
@@ -419,6 +486,26 @@ export default function Home() {
     setEditingCustomerId(null)
     setCustomerDraft(defaultCustomerDraft)
     setIsCustomerModalOpen(false)
+  }
+
+  const openMessageModal = (customer: MergedCustomer) => {
+    const nextChannel = getPreferredMessageChannel(customer)
+
+    setActiveSection('Musteriler')
+    setActiveMessageCustomer(customer)
+    setMessageChannel(nextChannel)
+    setMessageBody(createDefaultMessageBody(customer.customer))
+    setMessageSubject(`${businessName} bildirimi`)
+    setMessage('')
+    setIsMessageModalOpen(true)
+  }
+
+  const closeMessageModal = () => {
+    setActiveMessageCustomer(null)
+    setMessageChannel('sms')
+    setMessageBody('')
+    setMessageSubject('')
+    setIsMessageModalOpen(false)
   }
 
   const openProductModal = (product?: Product) => {
@@ -546,6 +633,97 @@ export default function Home() {
     setIsProductHistoryModalOpen(false)
   }
 
+  const resetRegisterFlow = () => {
+    setInviteCode('')
+    setPassword('')
+    setPasswordConfirm('')
+    setRegisterStep('verify-invite')
+  }
+
+  const resetAccessManagement = () => {
+    setManagedUsers([])
+    setManagedInvites([])
+    setInviteEmailDraft('')
+    setLastCreatedInvite(null)
+    setDeletingUserId(null)
+    setRevokingInviteId(null)
+    setIsCreatingInvite(false)
+    setIsAccessLoading(false)
+  }
+
+  const getAccessToken = async () => {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession()
+
+    if (error || !session?.access_token) {
+      throw new Error('Oturum bulunamadi. Tekrar giris yap.')
+    }
+
+    return session.access_token
+  }
+
+  const loadUserProfile = async (nextUserId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', nextUserId)
+      .maybeSingle()
+
+    if (error) {
+      setUserRole('member')
+      setMessage(
+        error.message.includes('profiles') ? 'Erisim migrationlarini calistir.' : error.message
+      )
+      return
+    }
+
+    setUserRole(data?.role === 'owner' ? 'owner' : 'member')
+  }
+
+  const loadAccessManagement = async () => {
+    if (userRole !== 'owner') {
+      resetAccessManagement()
+      return
+    }
+
+    setIsAccessLoading(true)
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch('/api/owner/access', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      const payload = (await response.json()) as {
+        error?: string
+        invites?: ManagedInvite[]
+        users?: ManagedUser[]
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Erisim verileri yuklenemedi.')
+      }
+
+      setManagedUsers(payload.users || [])
+      setManagedInvites(payload.invites || [])
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Erisim verileri yuklenemedi.')
+    } finally {
+      setIsAccessLoading(false)
+    }
+  }
+
+  const syncUserProfile = useEffectEvent(async (nextUserId: string) => {
+    await loadUserProfile(nextUserId)
+  })
+
+  const syncAccessManagement = useEffectEvent(async () => {
+    await loadAccessManagement()
+  })
+
   const checkUser = async () => {
     const { data, error } = await supabase.auth.getUser()
 
@@ -560,11 +738,17 @@ export default function Home() {
       setCustomers([])
       setProducts([])
       setPackageSales([])
+      setStaffCompensationSettings([])
+      setStaffCompensationDrafts({})
+      setUserRole('member')
+      resetRegisterFlow()
+      resetAccessManagement()
       return
     }
 
     setUserId(data.user.id)
     setUserEmail(data.user.email || '')
+    await loadUserProfile(data.user.id)
     setBrandName(
       typeof data.user.user_metadata?.brand_name === 'string' &&
         data.user.user_metadata.brand_name.trim()
@@ -651,6 +835,41 @@ export default function Home() {
     setPackageSales((data as PackageSale[]) || [])
   }
 
+  const getStaffCompensationSettings = async () => {
+    const { data, error } = await supabase
+      .from('staff_compensation_settings')
+      .select('*')
+      .order('staff_name', { ascending: true })
+
+    if (error) {
+      setMessage(
+        error.message.includes('staff_compensation_settings')
+          ? 'Maas ayari migrationini calistir.'
+          : error.message
+      )
+      return
+    }
+
+    const nextSettings = (data as StaffCompensationSetting[]) || []
+
+    setStaffCompensationSettings(nextSettings)
+    setStaffCompensationDrafts(
+      nextSettings.reduce<Record<string, StaffCompensationDraft>>((result, item) => {
+        result[item.staff_name] = {
+          bonusRate:
+            item.bonus_rate == null || Number(item.bonus_rate) === 0
+              ? ''
+              : `${Number(item.bonus_rate)}`,
+          fixedSalary:
+            item.fixed_salary == null || Number(item.fixed_salary) === 0
+              ? ''
+              : `${Number(item.fixed_salary)}`,
+        }
+        return result
+      }, {})
+    )
+  }
+
   const loadAppointments = useEffectEvent(async () => {
     await getAppointments()
   })
@@ -667,23 +886,100 @@ export default function Home() {
     await getPackageSales()
   })
 
-  const handleRegister = async () => {
+  const loadStaffCompensationSettings = useEffectEvent(async () => {
+    await getStaffCompensationSettings()
+  })
+
+  const verifyInviteForRegistration = async () => {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+    try {
+      const response = await fetch('/api/auth/verify-invite', {
+        body: JSON.stringify({
+          email,
+          inviteCode,
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      const payload = (await response.json()) as { email?: string; error?: string }
 
-    if (error) {
-      setMessage(error.message)
+      if (!response.ok) {
+        throw new Error(payload.error || 'Davet kodu dogrulanamadi.')
+      }
+
+      setEmail(payload.email || email.trim().toLowerCase())
+      setRegisterStep('create-password')
+      setMessage('Davet kodu dogrulandi. Simdi sifreni olustur.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Davet kodu dogrulanamadi.')
+    } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRegister = async () => {
+    if (registerStep === 'verify-invite') {
+      await verifyInviteForRegistration()
       return
     }
 
-    setMessage('Kayit basarili. Gerekirse email onayini kontrol et.')
-    setLoading(false)
+    if (password.trim().length < 8) {
+      setMessage('Sifre en az 8 karakter olmali.')
+      return
+    }
+
+    if (password !== passwordConfirm) {
+      setMessage('Sifre tekrar alani eslesmiyor.')
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await fetch('/api/auth/register-with-invite', {
+        body: JSON.stringify({
+          email,
+          inviteCode,
+          password,
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      const payload = (await response.json()) as { error?: string }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Kayit tamamlanamadi.')
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      await checkUser()
+      await getAppointments()
+      await getCustomers()
+      await getProducts()
+      await getPackageSales()
+      await getStaffCompensationSettings()
+      resetRegisterFlow()
+      setMessage('Kayit ve giris tamamlandi.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kayit tamamlanamadi.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLogin = async () => {
@@ -706,6 +1002,7 @@ export default function Home() {
     await getCustomers()
     await getProducts()
     await getPackageSales()
+    await getStaffCompensationSettings()
     setMessage('Giris basarili.')
     setLoading(false)
   }
@@ -715,9 +1012,10 @@ export default function Home() {
     setLoading(true)
     setMessage('')
     setEmail('')
-    setPassword('')
+    resetRegisterFlow()
     setUserId('')
     setUserEmail('')
+    setUserRole('member')
     setBrandName(defaultBrandName)
     setBusinessName(defaultBusinessName)
     setAccountBrandNameDraft(defaultBrandName)
@@ -727,6 +1025,9 @@ export default function Home() {
     setCustomers([])
     setProducts([])
     setPackageSales([])
+    setStaffCompensationSettings([])
+    setStaffCompensationDrafts({})
+    resetAccessManagement()
     setCustomerDraft(defaultCustomerDraft)
     setEditingCustomerId(null)
     setProductDraft(defaultProductDraft)
@@ -744,6 +1045,7 @@ export default function Home() {
       await getCustomers()
       await getProducts()
       await getPackageSales()
+      await getStaffCompensationSettings()
       setLoggingOut(false)
       setLoading(false)
       return
@@ -751,6 +1053,116 @@ export default function Home() {
 
     setLoggingOut(false)
     setLoading(false)
+  }
+
+  const createInviteCode = async () => {
+    const trimmedInviteEmail = inviteEmailDraft.trim().toLowerCase()
+
+    if (!trimmedInviteEmail) {
+      setMessage('Davet olusturmak icin email gir.')
+      return
+    }
+
+    setIsCreatingInvite(true)
+    setMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch('/api/owner/access', {
+        body: JSON.stringify({
+          email: trimmedInviteEmail,
+        }),
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      })
+      const payload = (await response.json()) as {
+        code?: string
+        error?: string
+        invite?: ManagedInvite
+      }
+
+      if (!response.ok || !payload.code || !payload.invite) {
+        throw new Error(payload.error || 'Davet kodu olusturulamadi.')
+      }
+
+      setLastCreatedInvite({
+        code: payload.code,
+        email: payload.invite.email,
+        expiresAt: payload.invite.expiresAt,
+      })
+      setInviteEmailDraft('')
+      await loadAccessManagement()
+      setMessage(`Davet kodu hazir: ${payload.invite.email}`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Davet kodu olusturulamadi.')
+    } finally {
+      setIsCreatingInvite(false)
+    }
+  }
+
+  const revokeInviteCode = async (inviteId: number) => {
+    setRevokingInviteId(inviteId)
+    setMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch(`/api/owner/access/${inviteId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        method: 'DELETE',
+      })
+      const payload = (await response.json()) as { error?: string }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Davet kodu iptal edilemedi.')
+      }
+
+      await loadAccessManagement()
+      setMessage('Davet kodu iptal edildi.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Davet kodu iptal edilemedi.')
+    } finally {
+      setRevokingInviteId(null)
+    }
+  }
+
+  const deleteManagedUser = async (targetUser: ManagedUser) => {
+    if (
+      !window.confirm(
+        `${targetUser.email} hesabi silinsin mi? Bu islem kullaniciya bagli tum verileri kalici olarak siler.`
+      )
+    ) {
+      return
+    }
+
+    setDeletingUserId(targetUser.id)
+    setMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch(`/api/owner/access/users/${targetUser.id}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        method: 'DELETE',
+      })
+      const payload = (await response.json()) as { email?: string; error?: string }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Kullanici silinemedi.')
+      }
+
+      await loadAccessManagement()
+      setMessage(`${payload.email || targetUser.email} hesabi silindi.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kullanici silinemedi.')
+    } finally {
+      setDeletingUserId(null)
+    }
   }
 
   const saveAccountSettings = async () => {
@@ -822,6 +1234,82 @@ export default function Home() {
     setIsAccountSettingsModalOpen(false)
     setMessage('Hesap ayarlari guncellendi.')
     setLoading(false)
+  }
+
+  const handleCompensationDraftChange = (
+    staffName: string,
+    field: keyof StaffCompensationDraft,
+    value: string
+  ) => {
+    const normalizedValue = value.replace(',', '.').replace(/[^\d.]/g, '')
+
+    setStaffCompensationDrafts((current) => ({
+      ...current,
+      [staffName]: {
+        ...current[staffName],
+        bonusRate: current[staffName]?.bonusRate || '',
+        fixedSalary: current[staffName]?.fixedSalary || '',
+        [field]: normalizedValue,
+      },
+    }))
+  }
+
+  const saveStaffCompensation = async (staffName: string) => {
+    const draft = staffCompensationDrafts[staffName] || {
+      bonusRate: '',
+      fixedSalary: '',
+    }
+    const fixedSalaryValue = Number.parseFloat(draft.fixedSalary || '0')
+    const bonusRateValue = Number.parseFloat(draft.bonusRate || '0')
+
+    if (Number.isNaN(fixedSalaryValue) || fixedSalaryValue < 0) {
+      setMessage('Sabit maas negatif olamaz.')
+      return
+    }
+
+    if (Number.isNaN(bonusRateValue) || bonusRateValue < 0) {
+      setMessage('Prim orani negatif olamaz.')
+      return
+    }
+
+    setSavingCompensationStaff(staffName)
+    setMessage('')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setMessage('Aktif oturum bulunamadi. Tekrar giris yap.')
+      setSavingCompensationStaff(null)
+      return
+    }
+
+    const payload = {
+      bonus_rate: bonusRateValue,
+      fixed_salary: fixedSalaryValue,
+      staff_name: staffName,
+      user_id: user.id,
+    }
+
+    const { error } = await supabase
+      .from('staff_compensation_settings')
+      .upsert(payload, { onConflict: 'user_id,staff_name' })
+
+    if (error) {
+      setMessage(
+        error.message.includes('staff_compensation_settings')
+          ? 'Maas ayari migrationini calistir.'
+          : error.message
+      )
+      setSavingCompensationStaff(null)
+      return
+    }
+
+    await getStaffCompensationSettings()
+    setMessage(`${staffName} icin maas ayari kaydedildi.`)
+    setSavingCompensationStaff(null)
   }
 
   const saveAppointment = async () => {
@@ -896,6 +1384,7 @@ export default function Home() {
 
   const saveCustomer = async () => {
     const trimmedCustomer = customerDraft.customer.trim()
+    const trimmedEmail = customerDraft.email.trim().toLowerCase() || null
     const normalizedPhone = customerDraft.phone.trim() || null
 
     if (!trimmedCustomer) {
@@ -922,6 +1411,7 @@ export default function Home() {
           .from('customers')
           .update({
             customer: trimmedCustomer,
+            email: trimmedEmail,
             phone: normalizedPhone,
           })
           .eq('id', editingCustomerId)
@@ -930,6 +1420,7 @@ export default function Home() {
           {
             user_id: user.id,
             customer: trimmedCustomer,
+            email: trimmedEmail,
             phone: normalizedPhone,
           },
         ])
@@ -944,6 +1435,73 @@ export default function Home() {
     closeCustomerModal()
     await getCustomers()
     setLoading(false)
+  }
+
+  const sendCustomerMessage = async () => {
+    if (!activeMessageCustomer) {
+      setMessage('Mesaj gonderilecek musteri secilmedi.')
+      return
+    }
+
+    const trimmedBody = messageBody.trim()
+    const trimmedSubject = messageSubject.trim()
+
+    if (!trimmedBody) {
+      setMessage('Mesaj icerigini yaz.')
+      return
+    }
+
+    if (messageChannel === 'sms' && !activeMessageCustomer.phone?.trim()) {
+      setMessage('Bu musteride telefon numarasi yok.')
+      return
+    }
+
+    if (messageChannel === 'email' && !activeMessageCustomer.email?.trim()) {
+      setMessage('Bu musteride email adresi yok.')
+      return
+    }
+
+    if (messageChannel === 'email' && !trimmedSubject) {
+      setMessage('Email konusu gir.')
+      return
+    }
+
+    setSendingMessage(true)
+    setMessage('')
+
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: messageChannel,
+          customerName: activeMessageCustomer.customer,
+          email: activeMessageCustomer.email,
+          phone: activeMessageCustomer.phone,
+          subject: trimmedSubject,
+          text: trimmedBody,
+        }),
+      })
+
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+
+      if (!response.ok) {
+        setMessage(payload?.error || 'Mesaj gonderilemedi.')
+        setSendingMessage(false)
+        return
+      }
+
+      setMessage(
+        messageChannel === 'sms' ? 'SMS gonderildi.' : 'Email gonderildi.'
+      )
+      closeMessageModal()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Mesaj gonderilemedi.')
+    } finally {
+      setSendingMessage(false)
+    }
   }
 
   const addProduct = async () => {
@@ -1602,10 +2160,15 @@ export default function Home() {
       if (!isMounted || !session?.user) {
         setUserId('')
         setUserEmail('')
+        setUserRole('member')
         setAppointments([])
         setCustomers([])
         setProducts([])
         setPackageSales([])
+        setStaffCompensationSettings([])
+        setStaffCompensationDrafts({})
+        resetRegisterFlow()
+        resetAccessManagement()
         return
       }
 
@@ -1646,13 +2209,108 @@ export default function Home() {
       return
     }
 
+    void syncUserProfile(userId)
     void loadAppointments()
     void loadCustomers()
     void loadProducts()
     void loadPackageSales()
+    void loadStaffCompensationSettings()
   }, [userId])
 
+  useEffect(() => {
+    if (!userId || userRole !== 'owner') {
+      resetAccessManagement()
+      return
+    }
+
+    void syncAccessManagement()
+  }, [userId, userRole])
+
+  useEffect(() => {
+    if (activeSection === 'Kullanicilar' && userRole !== 'owner') {
+      setActiveSection('Ozet')
+    }
+  }, [activeSection, userRole])
+
   if (userEmail && !loggingOut) {
+    const hasCustomCashRange = !!cashReportStartDate || !!cashReportEndDate
+    const isWithinCashReportRange = (dateValue: string | null) => {
+      if (!dateValue) {
+        return false
+      }
+
+      if (!hasCustomCashRange) {
+        return isDateWithinReportPeriod(dateValue, cashReportPeriod)
+      }
+
+      const targetDate = new Date(dateValue)
+
+      if (Number.isNaN(targetDate.getTime())) {
+        return false
+      }
+
+      if (cashReportStartDate) {
+        const startDate = createDateFromIso(cashReportStartDate)
+        startDate.setHours(0, 0, 0, 0)
+
+        if (targetDate.getTime() < startDate.getTime()) {
+          return false
+        }
+      }
+
+      if (cashReportEndDate) {
+        const endDate = createDateFromIso(cashReportEndDate)
+        endDate.setHours(23, 59, 59, 999)
+
+        if (targetDate.getTime() > endDate.getTime()) {
+          return false
+        }
+      }
+
+      return true
+    }
+    const cashReportPeriodLabel = hasCustomCashRange
+      ? `${cashReportStartDate || 'Baslangic'} - ${cashReportEndDate || 'Bitis'}`
+      : cashReportPeriod
+    const hasCustomPersonnelRange = !!personnelReportStartDate || !!personnelReportEndDate
+    const isWithinPersonnelReportRange = (dateValue: string | null) => {
+      if (!dateValue) {
+        return false
+      }
+
+      if (!hasCustomPersonnelRange) {
+        return isDateWithinReportPeriod(dateValue, cashReportPeriod)
+      }
+
+      const targetDate = new Date(dateValue)
+
+      if (Number.isNaN(targetDate.getTime())) {
+        return false
+      }
+
+      if (personnelReportStartDate) {
+        const startDate = createDateFromIso(personnelReportStartDate)
+        startDate.setHours(0, 0, 0, 0)
+
+        if (targetDate.getTime() < startDate.getTime()) {
+          return false
+        }
+      }
+
+      if (personnelReportEndDate) {
+        const endDate = createDateFromIso(personnelReportEndDate)
+        endDate.setHours(23, 59, 59, 999)
+
+        if (targetDate.getTime() > endDate.getTime()) {
+          return false
+        }
+      }
+
+      return true
+    }
+    const personnelReportPeriodLabel = hasCustomPersonnelRange
+      ? `${personnelReportStartDate || 'Baslangic'} - ${personnelReportEndDate || 'Bitis'}`
+      : cashReportPeriod
     const appointmentRows: AppointmentRow[] = appointments.map((item) => {
       const createdAt = new Date(item.created_at)
 
@@ -1712,6 +2370,15 @@ export default function Home() {
       return result
     }, {})
     const currentMonthDate = createDateFromIso(calendarDate)
+    const closedAppointmentsForCashReport = appointmentRows.filter(
+      (item) =>
+        !!item.closed_at &&
+        isCompletedAppointmentService(item.attendance_status, item.service_status) &&
+        isWithinCashReportRange(item.closed_at)
+    )
+    const packageSalesForCashReport = packageSales.filter((item) =>
+      isWithinCashReportRange(item.created_at)
+    )
     const closedAppointmentsForReport = appointmentRows.filter(
       (item) =>
         !!item.closed_at &&
@@ -1751,7 +2418,7 @@ export default function Home() {
       onlineOdeme: 0,
       diger: 0,
     }
-    const appointmentIncomeTotal = closedAppointmentsForReport.reduce((total, item) => {
+    const cashReportAppointmentIncomeTotal = closedAppointmentsForCashReport.reduce((total, item) => {
       const amount = parseCurrencyValue(item.collected_amount || item.total_price)
 
       if ((item.payment_method || '') === 'Nakit') {
@@ -1768,6 +2435,14 @@ export default function Home() {
 
       return total + amount
     }, 0)
+    const cashReportPackageSalesTotal = packageSalesForCashReport.reduce(
+      (total, item) => total + parseCurrencyValue(item.price),
+      0
+    )
+    const appointmentIncomeTotal = closedAppointmentsForReport.reduce(
+      (total, item) => total + parseCurrencyValue(item.collected_amount || item.total_price),
+      0
+    )
     const packageSalesTotal = packageSalesForReport.reduce(
       (total, item) => total + parseCurrencyValue(item.price),
       0
@@ -1792,24 +2467,24 @@ export default function Home() {
       {
         key: 'total',
         label: 'Toplam',
-        value: formatCurrencyValue(appointmentIncomeTotal + packageSalesTotal),
+        value: formatCurrencyValue(cashReportAppointmentIncomeTotal + cashReportPackageSalesTotal),
         items: [
-          ['Randevu gelirleri', formatCurrencyValue(appointmentIncomeTotal)],
-          ['Paket satislari', formatCurrencyValue(packageSalesTotal)],
-          ['Genel toplam', formatCurrencyValue(appointmentIncomeTotal + packageSalesTotal)],
+          ['Randevu gelirleri', formatCurrencyValue(cashReportAppointmentIncomeTotal)],
+          ['Paket satislari', formatCurrencyValue(cashReportPackageSalesTotal)],
+          ['Genel toplam', formatCurrencyValue(cashReportAppointmentIncomeTotal + cashReportPackageSalesTotal)],
         ],
       },
       {
         key: 'income',
         label: 'Gelirler toplami',
-        value: formatCurrencyValue(appointmentIncomeTotal + packageSalesTotal),
+        value: formatCurrencyValue(cashReportAppointmentIncomeTotal + cashReportPackageSalesTotal),
         items: [
           ['Nakit', formatCurrencyValue(appointmentCashTotals.nakit)],
           ['Kredi karti', formatCurrencyValue(appointmentCashTotals.krediKarti)],
           ['Havale', formatCurrencyValue(appointmentCashTotals.havale)],
           ['Online odeme', formatCurrencyValue(appointmentCashTotals.onlineOdeme)],
           ['Diger', formatCurrencyValue(appointmentCashTotals.diger)],
-          ['Paket satislari', formatCurrencyValue(packageSalesTotal)],
+          ['Paket satislari', formatCurrencyValue(cashReportPackageSalesTotal)],
         ],
       },
       {
@@ -1845,7 +2520,7 @@ export default function Home() {
       {}
     )
     const todayIso = getTodayDateInputValue()
-    const buildPersonnelRowsForPeriod = (period: 'Bugun' | CashReportPeriod) => {
+    const buildPersonnelRows = (isWithinPersonnelPeriod: (dateValue: string | null) => boolean) => {
       const rowsByStaff = staffOptions.reduce<Record<string, PersonnelReportRow>>((result, staffName) => {
         result[staffName] = {
           staff: staffName,
@@ -1875,24 +2550,6 @@ export default function Home() {
         }
 
         return rowsByStaff[normalizedStaffName]
-      }
-
-      const isWithinPersonnelPeriod = (dateValue: string | null) => {
-        if (!dateValue) {
-          return false
-        }
-
-        if (period === 'Bugun') {
-          const date = new Date(dateValue)
-
-          if (Number.isNaN(date.getTime())) {
-            return false
-          }
-
-          return formatDateIso(date) === todayIso
-        }
-
-        return isDateWithinReportPeriod(dateValue, period)
       }
 
       appointmentRows
@@ -1932,8 +2589,62 @@ export default function Home() {
         return left.staff.localeCompare(right.staff, 'tr-TR')
       })
     }
-    const personnelReportRows = buildPersonnelRowsForPeriod(cashReportPeriod)
-    const paidAppointmentSalesForReport = closedAppointmentsForReport
+    const buildPersonnelRowsForPeriod = (period: 'Bugun' | CashReportPeriod) =>
+      buildPersonnelRows((dateValue) => {
+        if (!dateValue) {
+          return false
+        }
+
+        if (period === 'Bugun') {
+          const date = new Date(dateValue)
+
+          if (Number.isNaN(date.getTime())) {
+            return false
+          }
+
+          return formatDateIso(date) === todayIso
+        }
+
+        return isDateWithinReportPeriod(dateValue, period)
+      })
+    const personnelReportRows = buildPersonnelRows(isWithinPersonnelReportRange)
+    const staffCompensationSettingsByStaff = staffCompensationSettings.reduce<
+      Record<string, StaffCompensationSetting>
+    >((result, item) => {
+      result[item.staff_name] = item
+      return result
+    }, {})
+    const personnelCompensationRows: PersonnelCompensationRow[] = personnelReportRows.map((item) => {
+      const setting = staffCompensationSettingsByStaff[item.staff]
+      const draft = staffCompensationDrafts[item.staff]
+      const fixedSalary = Number.parseFloat(
+        draft?.fixedSalary || `${Number(setting?.fixed_salary || 0)}`
+      )
+      const bonusRate = Number.parseFloat(
+        draft?.bonusRate || `${Number(setting?.bonus_rate || 0)}`
+      )
+      const normalizedFixedSalary = Number.isFinite(fixedSalary) ? fixedSalary : 0
+      const normalizedBonusRate = Number.isFinite(bonusRate) ? bonusRate : 0
+      const bonusAmount = (item.totalRevenue * normalizedBonusRate) / 100
+
+      return {
+        ...item,
+        bonusAmount,
+        bonusRate: normalizedBonusRate,
+        earnedAmount: normalizedFixedSalary + bonusAmount,
+        fixedSalary: normalizedFixedSalary,
+      }
+    })
+    const closedAppointmentsForPersonnelReport = appointmentRows.filter(
+      (item) =>
+        !!item.closed_at &&
+        isCompletedAppointmentService(item.attendance_status, item.service_status) &&
+        isWithinPersonnelReportRange(item.closed_at)
+    )
+    const packageSalesForPersonnelReport = packageSales.filter((item) =>
+      isWithinPersonnelReportRange(item.created_at)
+    )
+    const paidAppointmentSalesForReport = closedAppointmentsForPersonnelReport
       .map((item) => ({
         amount: parseCurrencyValue(item.collected_amount || item.total_price),
         creator: item.creator?.trim() || 'Atanmamis',
@@ -1944,7 +2655,7 @@ export default function Home() {
         service: item.service.trim() || 'Belirtilmeyen hizmet',
       }))
       .filter((item) => item.amount > 0)
-    const paidPackageSalesForReport = packageSalesForReport
+    const paidPackageSalesForReport = packageSalesForPersonnelReport
       .map((item) => ({
         amount: parseCurrencyValue(item.price),
         creator: packageSaleCreatorLookup[item.id] || 'Atanmamis',
@@ -1957,7 +2668,7 @@ export default function Home() {
       }))
       .filter((item) => item.amount > 0)
     const personnelDetailEntriesByStaff = [
-      ...closedAppointmentsForReport
+      ...closedAppointmentsForPersonnelReport
         .map<PersonnelDetailEntry | null>((item) => {
           const staffName = item.staff?.trim() || 'Atanmamis'
           const amount = parseCurrencyValue(item.collected_amount || item.total_price)
@@ -2416,32 +3127,43 @@ export default function Home() {
       .map((item, index) => ({
         id: Number(`9${index}`),
         customer: item.customer || '',
+        email: null,
         phone: item.phone || null,
         source: 'appointment' as const,
         created_at: item.created_at,
       }))
     const mergedCustomers = [...customers, ...appointmentCustomers].reduce<MergedCustomer[]>(
       (result, item) => {
-      const normalizedName = item.customer.trim().toLocaleLowerCase('tr-TR')
-      const existingCustomer = result.find(
-        (current) => current.customer.trim().toLocaleLowerCase('tr-TR') === normalizedName
-      )
+        const normalizedName = item.customer.trim().toLocaleLowerCase('tr-TR')
+        const existingCustomer = result.find(
+          (current) => current.customer.trim().toLocaleLowerCase('tr-TR') === normalizedName
+        )
 
-      if (!item.customer.trim()) {
+        if (!item.customer.trim()) {
+          return result
+        }
+
+        if (!existingCustomer) {
+          result.push(item)
+          return result
+        }
+
+        if (existingCustomer.source !== item.source) {
+          existingCustomer.source = 'both'
+        }
+
+        if (!existingCustomer.phone && item.phone) {
+          existingCustomer.phone = item.phone
+        }
+
+        if (!existingCustomer.email && item.email) {
+          existingCustomer.email = item.email
+        }
+
         return result
-      }
-
-      if (!existingCustomer) {
-        result.push(item)
-        return result
-      }
-
-      if (existingCustomer.source !== item.source) {
-        existingCustomer.source = 'both'
-      }
-
-      return result
-    }, [])
+      },
+      []
+    )
     const appointmentClosingProductOptions = Object.values(
       products
         .filter(
@@ -2527,8 +3249,37 @@ export default function Home() {
       calendarView === 'Haftalik gorunum'
         ? formatWeekRangeLabel(calendarDate)
         : calendarView === 'Aylik gorunum'
-          ? formatMonthRangeLabel(calendarDate)
+        ? formatMonthRangeLabel(calendarDate)
           : formatDisplayDate(calendarDate)
+
+    const downloadPersonnelPayrollPdf = async (staffName: string) => {
+      const row = personnelCompensationRows.find((item) => item.staff === staffName)
+
+      if (!row) {
+        setMessage('Personel bordrosu icin satir bulunamadi.')
+        return
+      }
+
+      const reportLabel = personnelReportPeriodLabel
+      const rows = [
+        ['Alan', 'Deger'],
+        ['Donem', reportLabel],
+        ['Personel', row.staff],
+        ['Hizmet adedi', `${row.completedAppointments}`],
+        ['Paket satisi', `${row.packageSales}`],
+        ['Hak edis baz', formatCurrencyValue(row.totalRevenue)],
+        ['Sabit maas', formatCurrencyValue(row.fixedSalary)],
+        ['Prim orani', `%${row.bonusRate.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`],
+        ['Prim tutari', formatCurrencyValue(row.bonusAmount)],
+        ['Toplam hak edis', formatCurrencyValue(row.earnedAmount)],
+      ]
+
+      await downloadPdfFile({
+        filename: `${row.staff.toLocaleLowerCase('tr-TR').replace(/\s+/g, '-')}-bordro.pdf`,
+        rows,
+        title: `Personel Bordrosu - ${row.staff}`,
+      })
+    }
 
     const handleCalendarViewChange = (view: string) => {
       setCalendarView(view)
@@ -2567,6 +3318,10 @@ export default function Home() {
             : addDays(current, 1)
       )
     }
+    const dashboardSidebarItems =
+      userRole === 'owner'
+        ? [...sidebarItems, { label: 'Kullanicilar', icon: 'users' }]
+        : sidebarItems
 
     return (
       <main className="min-h-screen min-w-[1280px] bg-[#dfe3ec] text-slate-900">
@@ -2574,6 +3329,7 @@ export default function Home() {
           <DashboardSidebar
             activeSection={activeSection}
             isReportMenuOpen={isReportMenuOpen}
+            items={dashboardSidebarItems}
             loading={loading}
             onLogout={handleLogout}
             onSelectReportSection={handleReportSectionChange}
@@ -2641,29 +3397,63 @@ export default function Home() {
                   customers={mergedCustomers}
                   message={message}
                   onEditCustomer={openCustomerModal}
+                  onOpenMessageModal={openMessageModal}
                   onOpenCustomerModal={openCustomerModal}
                   onRefreshCustomers={() => void getCustomers()}
+                />
+              ) : activeSection === 'Kullanicilar' && userRole === 'owner' ? (
+                <AccessManagementPage
+                  currentUserId={userId}
+                  deletingUserId={deletingUserId}
+                  inviteEmail={inviteEmailDraft}
+                  invites={managedInvites}
+                  isCreatingInvite={isCreatingInvite}
+                  isLoading={isAccessLoading}
+                  lastCreatedInvite={lastCreatedInvite}
+                  message={message}
+                  onCreateInvite={() => void createInviteCode()}
+                  onDeleteUser={(user) => void deleteManagedUser(user)}
+                  onInviteEmailChange={setInviteEmailDraft}
+                  onRefresh={() => void loadAccessManagement()}
+                  onRevokeInvite={(inviteId) => void revokeInviteCode(inviteId)}
+                  revokingInviteId={revokingInviteId}
+                  users={managedUsers}
                 />
               ) : activeSection === 'Kasa raporu' ? (
                 <CashReportPage
                   message={message}
+                  onEndDateChange={setCashReportEndDate}
                   onPeriodChange={setCashReportPeriod}
+                  onStartDateChange={setCashReportStartDate}
                   onToggleSection={toggleCashReportSection}
                   openCashReportSections={openCashReportSections}
                   period={cashReportPeriod}
+                  rangeEndDate={cashReportEndDate}
+                  rangeStartDate={cashReportStartDate}
+                  reportLabel={cashReportPeriodLabel}
                   sections={cashReportComputedSections as readonly CashReportSection[]}
                 />
               ) : activeSection === 'Personel raporu' ? (
                 <PersonnelReportPage
+                  compensationDrafts={staffCompensationDrafts}
+                  isSavingCompensationFor={savingCompensationStaff}
                   message={message}
+                  onCompensationDraftChange={handleCompensationDraftChange}
+                  onDownloadPayrollPdf={downloadPersonnelPayrollPdf}
+                  onEndDateChange={setPersonnelReportEndDate}
                   onOpenPersonnelDetail={openPersonnelDetailModal}
                   onPeriodChange={setCashReportPeriod}
                   onRefreshReport={() => {
                     void getAppointments()
                     void getPackageSales()
+                    void getStaffCompensationSettings()
                   }}
+                  onSaveCompensation={saveStaffCompensation}
+                  onStartDateChange={setPersonnelReportStartDate}
                   period={cashReportPeriod}
-                  rows={personnelReportRows as readonly PersonnelReportRow[]}
+                  rangeEndDate={personnelReportEndDate}
+                  rangeStartDate={personnelReportStartDate}
+                  rows={personnelCompensationRows as readonly PersonnelCompensationRow[]}
                 />
               ) : activeSection === 'Satis raporlari' ? (
                 <SalesReportPage
@@ -2741,6 +3531,20 @@ export default function Home() {
                 onSubmit={saveCustomer}
               />
 
+              <MessageModal
+                body={messageBody}
+                channel={messageChannel}
+                isOpen={isMessageModalOpen}
+                loading={sendingMessage}
+                onBodyChange={setMessageBody}
+                onChannelChange={setMessageChannel}
+                onClose={closeMessageModal}
+                onSubmit={sendCustomerMessage}
+                onSubjectChange={setMessageSubject}
+                recipient={activeMessageCustomer}
+                subject={messageSubject}
+              />
+
               <ProductModal
                 draft={productDraft}
                 isEditing={editingProductId !== null}
@@ -2787,7 +3591,7 @@ export default function Home() {
                 entries={activePersonnelDetailEntries}
                 isOpen={isPersonnelDetailModalOpen}
                 onClose={closePersonnelDetailModal}
-                period={cashReportPeriod}
+                period={personnelReportPeriodLabel}
                 staffRow={activePersonnelDetailRow}
               />
 
@@ -2824,12 +3628,22 @@ export default function Home() {
             glowUp
           </p>
           <h1 className="text-4xl font-semibold tracking-[-0.04em]">Hos geldin</h1>
-          <p className="mt-2 text-sm text-white/70">Giris yap veya hesap olustur</p>
+          <p className="mt-2 text-sm text-white/70">
+            {mode === 'login'
+              ? 'Email ve sifren ile giris yap'
+              : registerStep === 'verify-invite'
+                ? 'Email ve tek kullanimlik davet kodunu dogrula'
+                : 'Davet onaylandi. Simdi sifreni olustur'}
+          </p>
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
           <button
-            onClick={() => setMode('login')}
+            onClick={() => {
+              setMode('login')
+              resetRegisterFlow()
+              setMessage('')
+            }}
             className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
               mode === 'login'
                 ? 'bg-lime-300 text-slate-950'
@@ -2839,7 +3653,11 @@ export default function Home() {
             Giris Yap
           </button>
           <button
-            onClick={() => setMode('register')}
+            onClick={() => {
+              setMode('register')
+              resetRegisterFlow()
+              setMessage('')
+            }}
             className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
               mode === 'register'
                 ? 'bg-lime-300 text-slate-950'
@@ -2856,21 +3674,63 @@ export default function Home() {
             placeholder="Email adresin"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
+            readOnly={mode === 'register' && registerStep === 'create-password'}
+            className={`w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40 ${
+              mode === 'register' && registerStep === 'create-password' ? 'opacity-80' : ''
+            }`.trim()}
           />
-          <input
-            type="password"
-            placeholder="Sifren"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
-          />
+
+          {mode === 'register' && (
+            <input
+              type="text"
+              placeholder="Davet kodun"
+              value={inviteCode}
+              onChange={(event) => setInviteCode(normalizeInviteCodeInput(event.target.value))}
+              readOnly={registerStep === 'create-password'}
+              className={`w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40 ${
+                registerStep === 'create-password' ? 'opacity-80' : ''
+              }`.trim()}
+            />
+          )}
+
+          {(mode === 'login' || registerStep === 'create-password') && (
+            <input
+              type="password"
+              placeholder={mode === 'login' ? 'Sifren' : 'Yeni sifren'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
+            />
+          )}
+
+          {mode === 'register' && registerStep === 'create-password' && (
+            <input
+              type="password"
+              placeholder="Sifre tekrar"
+              value={passwordConfirm}
+              onChange={(event) => setPasswordConfirm(event.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
+            />
+          )}
+
+          {mode === 'register' && registerStep === 'create-password' && (
+            <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
+              Davet kodu ve email eslesti. Bu hesap icin ilk sifreyi simdi olusturuyorsun.
+            </div>
+          )}
+
           <button
             onClick={mode === 'login' ? handleLogin : handleRegister}
             disabled={loading}
             className="w-full rounded-2xl bg-lime-300 px-4 py-3 font-medium text-slate-950 disabled:opacity-50"
           >
-            {loading ? 'Bekle...' : mode === 'login' ? 'Giris Yap' : 'Kayit Ol'}
+            {loading
+              ? 'Bekle...'
+              : mode === 'login'
+                ? 'Giris Yap'
+                : registerStep === 'verify-invite'
+                  ? 'Kodu dogrula'
+                  : 'Hesap olustur'}
           </button>
         </div>
 

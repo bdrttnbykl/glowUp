@@ -10,19 +10,29 @@ import { downloadPdfFile } from '@/app/_home/utils'
 
 type CashReportPageProps = {
   message: string
+  onEndDateChange: (value: string) => void
   onPeriodChange: (value: CashReportPeriod) => void
+  onStartDateChange: (value: string) => void
   onToggleSection: (key: string) => void
   openCashReportSections: string[]
   period: CashReportPeriod
+  rangeEndDate: string
+  rangeStartDate: string
+  reportLabel: string
   sections: readonly CashReportSection[]
 }
 
 export function CashReportPage({
   message,
+  onEndDateChange,
   onPeriodChange,
+  onStartDateChange,
   onToggleSection,
   openCashReportSections,
   period,
+  rangeEndDate,
+  rangeStartDate,
+  reportLabel,
   sections,
 }: CashReportPageProps) {
   const totalValue = sections.find((section) => section.key === 'total')?.value || '0,00 TL'
@@ -43,7 +53,7 @@ export function CashReportPage({
     downloadPdfFile({
       filename: 'kasa-raporu.pdf',
       rows,
-      title: `Kasa Raporu - ${period}`,
+      title: `Kasa Raporu - ${reportLabel}`,
     })
   }
 
@@ -70,6 +80,18 @@ export function CashReportPage({
             >
               Indir
             </button>
+            <input
+              type="date"
+              value={rangeStartDate}
+              onChange={(event) => onStartDateChange(event.target.value)}
+              className="rounded-2xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none"
+            />
+            <input
+              type="date"
+              value={rangeEndDate}
+              onChange={(event) => onEndDateChange(event.target.value)}
+              className="rounded-2xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none"
+            />
           </>
         }
         stats={

@@ -1,11 +1,11 @@
-import type { CashReportPeriod, PersonnelDetailEntry, PersonnelReportRow } from '@/app/_home/types'
+import type { PersonnelDetailEntry, PersonnelReportRow } from '@/app/_home/types'
 import { formatCurrencyValue } from '@/app/_home/utils'
 
 type PersonnelDetailModalProps = {
   entries: readonly PersonnelDetailEntry[]
   isOpen: boolean
   onClose: () => void
-  period: CashReportPeriod
+  period: string
   staffRow: PersonnelReportRow | null
 }
 
@@ -25,7 +25,9 @@ export function PersonnelDetailModal({
       <div className="w-full max-w-5xl rounded-[20px] border border-slate-200 bg-white p-6 shadow-[0_30px_90px_rgba(15,23,42,0.28)]">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-800">{staffRow.staff} detaylari</h2>
+            <h2 className="text-2xl font-semibold text-slate-800">
+              {staffRow.staff} islem gecmisi
+            </h2>
             <p className="mt-1 text-sm text-slate-500">
               {period} doneminde hangi musterilere hangi hizmetleri verdigini ve paket
               hareketlerini burada gorebilirsin.

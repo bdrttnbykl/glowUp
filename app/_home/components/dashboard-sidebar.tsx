@@ -1,12 +1,18 @@
 import Image from 'next/image'
 
-import { reportSidebarItems, sidebarItems } from '@/app/_home/constants'
+import { reportSidebarItems } from '@/app/_home/constants'
 import { SidebarIcon } from '@/app/_home/sidebar-icon'
 import salonAppyLogo from '@/img/glowup-wordmark-transparent-v2.png'
+
+type SidebarItem = {
+  icon: string
+  label: string
+}
 
 type DashboardSidebarProps = {
   activeSection: string
   isReportMenuOpen: boolean
+  items: readonly SidebarItem[]
   loading: boolean
   onLogout: () => void
   onSelectReportSection: (section: string) => void
@@ -17,6 +23,7 @@ type DashboardSidebarProps = {
 export function DashboardSidebar({
   activeSection,
   isReportMenuOpen,
+  items,
   loading,
   onLogout,
   onSelectReportSection,
@@ -49,7 +56,7 @@ export function DashboardSidebar({
           </div>
 
           <nav className="flex w-full flex-col gap-4 pr-1">
-            {sidebarItems.map((item) => {
+            {items.map((item) => {
               const active = item.label === activeSection
               const isReportsItem = item.label === 'Raporlar'
 

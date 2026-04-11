@@ -1,5 +1,7 @@
 export type AuthMode = 'login' | 'register'
 
+export type UserRole = 'member' | 'owner'
+
 export type Appointment = {
   id: number
   customer: string | null
@@ -37,6 +39,7 @@ export type AppointmentDraft = {
 export type Customer = {
   id: number
   customer: string
+  email: string | null
   phone: string | null
   source: 'manual' | 'appointment'
   created_at: string
@@ -44,6 +47,7 @@ export type Customer = {
 
 export type CustomerDraft = {
   customer: string
+  email: string
   phone: string
 }
 
@@ -130,10 +134,13 @@ export type CalendarAppointment = AppointmentRow & {
 export type MergedCustomer = {
   id: number
   customer: string
+  email: string | null
   phone: string | null
   source: 'manual' | 'appointment' | 'both'
   created_at: string
 }
+
+export type MessageChannel = 'sms' | 'email'
 
 export type CashReportSection = {
   key: string
@@ -159,6 +166,23 @@ export type PersonnelReportRow = {
   totalRevenue: number
 }
 
+export type StaffCompensationSetting = {
+  id: number
+  user_id: string
+  staff_name: string
+  fixed_salary: number | string | null
+  bonus_rate: number | string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PersonnelCompensationRow = PersonnelReportRow & {
+  bonusAmount: number
+  bonusRate: number
+  earnedAmount: number
+  fixedSalary: number
+}
+
 export type PersonnelDetailEntry = {
   amount: number
   customer: string
@@ -167,4 +191,26 @@ export type PersonnelDetailEntry = {
   occurredAt: string
   paymentMethod: string | null
   phone: string | null
+}
+
+export type InviteStatus = 'expired' | 'pending' | 'revoked' | 'used'
+
+export type ManagedUser = {
+  createdAt: string
+  email: string
+  id: string
+  invitedByEmail: string | null
+  role: UserRole
+}
+
+export type ManagedInvite = {
+  codeHint: string
+  createdAt: string
+  createdByEmail: string | null
+  email: string
+  expiresAt: string
+  id: number
+  status: InviteStatus
+  usedAt: string | null
+  usedByEmail: string | null
 }

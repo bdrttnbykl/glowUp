@@ -21,6 +21,7 @@ export const defaultAppointmentDraft: AppointmentDraft = {
 
 export const defaultCustomerDraft: CustomerDraft = {
   customer: '',
+  email: '',
   phone: '',
 }
 

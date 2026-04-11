@@ -55,6 +55,13 @@ export function CustomerModal({
             className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
           />
           <input
+            type="email"
+            value={draft.email}
+            onChange={(e) => onDraftChange({ ...draft, email: e.target.value })}
+            placeholder="Email"
+            className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
+          />
+          <input
             inputMode="tel"
             maxLength={10}
             pattern="^\\d{0,10}$"
