@@ -27,7 +27,9 @@ type AccessManagementPageProps = {
   onInviteEmailChange: (value: string) => void
   onRefresh: () => void
   onRevokeInvite: (inviteId: number) => void
+  onUpdateUserStatus: (user: ManagedUser, nextStatus: ManagedUser['status']) => void
   revokingInviteId: number | null
+  updatingUserId: string | null
   users: ManagedUser[]
 }
 
@@ -59,7 +61,9 @@ export function AccessManagementPage({
   onInviteEmailChange,
   onRefresh,
   onRevokeInvite,
+  onUpdateUserStatus,
   revokingInviteId,
+  updatingUserId,
   users,
 }: AccessManagementPageProps) {
   const ownerCount = users.filter((user) => user.role === 'owner').length
@@ -160,11 +164,12 @@ export function AccessManagementPage({
           </div>
 
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[860px] bg-white text-left">
+            <table className="w-full min-w-[980px] bg-white text-left">
               <thead className="border-b border-[#d7e0eb] bg-[#f6f9fd] text-[13px] uppercase tracking-[0.12em] text-slate-500">
                 <tr>
                   <th className="px-4 py-4 font-semibold">Email</th>
                   <th className="px-4 py-4 font-semibold">Rol</th>
+                  <th className="px-4 py-4 font-semibold">Durum</th>
                   <th className="px-4 py-4 font-semibold">Davet eden</th>
                   <th className="px-4 py-4 font-semibold">Olusturulma</th>
                   <th className="px-4 py-4 font-semibold text-right">Islem</th>
@@ -173,7 +178,7 @@ export function AccessManagementPage({
               <tbody className="text-[15px] text-slate-700">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
                       Kullanici kaydi bulunamadi.
                     </td>
                   </tr>
@@ -192,6 +197,17 @@ export function AccessManagementPage({
                           {user.role}
                         </span>
                       </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
+                            user.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {user.status === 'active' ? 'aktif' : 'pasif'}
+                        </span>
+                      </td>
                       <td className="px-4 py-4">{user.invitedByEmail || '-'}</td>
                       <td className="px-4 py-4">
                         {new Date(user.createdAt).toLocaleDateString('tr-TR', {
@@ -201,14 +217,36 @@ export function AccessManagementPage({
                         })}
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateUserStatus(
+                                user,
+                                user.status === 'active' ? 'inactive' : 'active'
+                              )
+                            }
+                            disabled={
+                              user.role !== 'member' ||
+                              user.id === currentUserId ||
+                              updatingUserId === user.id
+                            }
+                            className="rounded-xl border border-[#c8d6e8] bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:border-[#e6eaf0] disabled:text-slate-300"
+                          >
+                            {updatingUserId === user.id
+                              ? 'Guncelleniyor...'
+                              : user.status === 'active'
+                                ? 'Pasife al'
+                                : 'Aktif et'}
+                          </button>
                           <button
                             type="button"
                             onClick={() => onDeleteUser(user)}
                             disabled={
                               user.role !== 'member' ||
                               user.id === currentUserId ||
-                              deletingUserId === user.id
+                              deletingUserId === user.id ||
+                              updatingUserId === user.id
                             }
                             className="rounded-xl border border-[#f1c3c8] bg-white px-4 py-3 text-sm font-medium text-rose-600 disabled:cursor-not-allowed disabled:border-[#e6eaf0] disabled:text-slate-300"
                           >

@@ -62,6 +62,7 @@ import type {
   ProductDraft,
   StaffCompensationSetting,
   UserRole,
+  UserStatus,
 } from '@/app/_home/types'
 import {
   addDays,
@@ -115,6 +116,9 @@ type RegisterStep = 'create-password' | 'verify-invite'
 
 const normalizeInviteCodeInput = (value: string) =>
   value.replace(inviteCodeInputPattern, '').toUpperCase()
+
+const hasMissingProfileStatusError = (message: string) =>
+  message.toLowerCase().includes('status') && message.toLowerCase().includes('profiles')
 
 const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date()) => {
   const periodStart = new Date(referenceDate)
@@ -365,6 +369,7 @@ export default function Home() {
   const [isAccessLoading, setIsAccessLoading] = useState(false)
   const [isCreatingInvite, setIsCreatingInvite] = useState(false)
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
   const [revokingInviteId, setRevokingInviteId] = useState<number | null>(null)
   const [messageChannel, setMessageChannel] = useState<MessageChannel>('sms')
   const [messageBody, setMessageBody] = useState('')
@@ -646,9 +651,33 @@ export default function Home() {
     setInviteEmailDraft('')
     setLastCreatedInvite(null)
     setDeletingUserId(null)
+    setUpdatingUserId(null)
     setRevokingInviteId(null)
     setIsCreatingInvite(false)
     setIsAccessLoading(false)
+  }
+
+  const clearAuthenticatedState = () => {
+    setUserId('')
+    setUserEmail('')
+    setUserRole('member')
+    setBrandName(defaultBrandName)
+    setBusinessName(defaultBusinessName)
+    setAccountBrandNameDraft(defaultBrandName)
+    setAccountBusinessNameDraft(defaultBusinessName)
+    setAppointments([])
+    setCustomers([])
+    setProducts([])
+    setPackageSales([])
+    setStaffCompensationSettings([])
+    setStaffCompensationDrafts({})
+    resetAccessManagement()
+  }
+
+  const signOutInactiveAccount = async () => {
+    clearAuthenticatedState()
+    await supabase.auth.signOut({ scope: 'local' })
+    setMessage('Bu hesap pasife alindi. Owner ile iletisime gec.')
   }
 
   const getAccessToken = async () => {
@@ -665,21 +694,45 @@ export default function Home() {
   }
 
   const loadUserProfile = async (nextUserId: string) => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', nextUserId)
       .maybeSingle()
+
+    if (error && hasMissingProfileStatusError(error.message)) {
+      const fallbackResult = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', nextUserId)
+        .maybeSingle()
+
+      data = fallbackResult.data
+        ? {
+            ...fallbackResult.data,
+            status: 'active',
+          }
+        : null
+      error = fallbackResult.error
+    }
 
     if (error) {
       setUserRole('member')
       setMessage(
         error.message.includes('profiles') ? 'Erisim migrationlarini calistir.' : error.message
       )
-      return
+      return null
     }
 
-    setUserRole(data?.role === 'owner' ? 'owner' : 'member')
+    const nextRole = data?.role === 'owner' ? 'owner' : 'member'
+    const nextStatus = data?.status === 'inactive' ? 'inactive' : 'active'
+
+    setUserRole(nextRole)
+
+    return {
+      role: nextRole,
+      status: nextStatus,
+    }
   }
 
   const loadAccessManagement = async () => {
@@ -717,7 +770,11 @@ export default function Home() {
   }
 
   const syncUserProfile = useEffectEvent(async (nextUserId: string) => {
-    await loadUserProfile(nextUserId)
+    const profile = await loadUserProfile(nextUserId)
+
+    if (profile?.status === 'inactive') {
+      await signOutInactiveAccount()
+    }
   })
 
   const syncAccessManagement = useEffectEvent(async () => {
@@ -728,27 +785,20 @@ export default function Home() {
     const { data, error } = await supabase.auth.getUser()
 
     if (error || !data.user) {
-      setUserId('')
-      setUserEmail('')
-      setBrandName(defaultBrandName)
-      setBusinessName(defaultBusinessName)
-      setAccountBrandNameDraft(defaultBrandName)
-      setAccountBusinessNameDraft(defaultBusinessName)
-      setAppointments([])
-      setCustomers([])
-      setProducts([])
-      setPackageSales([])
-      setStaffCompensationSettings([])
-      setStaffCompensationDrafts({})
-      setUserRole('member')
+      clearAuthenticatedState()
       resetRegisterFlow()
-      resetAccessManagement()
-      return
+      return false
     }
 
     setUserId(data.user.id)
     setUserEmail(data.user.email || '')
-    await loadUserProfile(data.user.id)
+    const profile = await loadUserProfile(data.user.id)
+
+    if (profile?.status === 'inactive') {
+      await signOutInactiveAccount()
+      return false
+    }
+
     setBrandName(
       typeof data.user.user_metadata?.brand_name === 'string' &&
         data.user.user_metadata.brand_name.trim()
@@ -773,6 +823,8 @@ export default function Home() {
         ? data.user.user_metadata.business_name.trim()
         : defaultBusinessName
     )
+
+    return true
   }
 
   const getAppointments = async () => {
@@ -967,7 +1019,12 @@ export default function Home() {
         throw new Error(error.message)
       }
 
-      await checkUser()
+      const isActive = await checkUser()
+
+      if (!isActive) {
+        return
+      }
+
       await getAppointments()
       await getCustomers()
       await getProducts()
@@ -992,12 +1049,22 @@ export default function Home() {
     })
 
     if (error) {
-      setMessage(error.message)
+      setMessage(
+        error.message.toLowerCase().includes('banned')
+          ? 'Bu hesap pasife alindi. Owner ile iletisime gec.'
+          : error.message
+      )
       setLoading(false)
       return
     }
 
-    await checkUser()
+    const isActive = await checkUser()
+
+    if (!isActive) {
+      setLoading(false)
+      return
+    }
+
     await getAppointments()
     await getCustomers()
     await getProducts()
@@ -1162,6 +1229,49 @@ export default function Home() {
       setMessage(error instanceof Error ? error.message : 'Kullanici silinemedi.')
     } finally {
       setDeletingUserId(null)
+    }
+  }
+
+  const setManagedUserStatus = async (targetUser: ManagedUser, nextStatus: UserStatus) => {
+    const actionLabel = nextStatus === 'inactive' ? 'pasife al' : 'yeniden aktif et'
+
+    if (
+      !window.confirm(`${targetUser.email} hesabi ${actionLabel}ilsin mi?`)
+    ) {
+      return
+    }
+
+    setUpdatingUserId(targetUser.id)
+    setMessage('')
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch(`/api/owner/access/users/${targetUser.id}`, {
+        body: JSON.stringify({
+          status: nextStatus,
+        }),
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'PATCH',
+      })
+      const payload = (await response.json()) as { email?: string; error?: string; status?: UserStatus }
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Kullanici durumu guncellenemedi.')
+      }
+
+      await loadAccessManagement()
+      setMessage(
+        `${payload.email || targetUser.email} hesabi ${
+          payload.status === 'inactive' ? 'pasife alindi.' : 'yeniden aktive edildi.'
+        }`
+      )
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kullanici durumu guncellenemedi.')
+    } finally {
+      setUpdatingUserId(null)
     }
   }
 
@@ -3416,7 +3526,11 @@ export default function Home() {
                   onInviteEmailChange={setInviteEmailDraft}
                   onRefresh={() => void loadAccessManagement()}
                   onRevokeInvite={(inviteId) => void revokeInviteCode(inviteId)}
+                  onUpdateUserStatus={(user, nextStatus) =>
+                    void setManagedUserStatus(user, nextStatus)
+                  }
                   revokingInviteId={revokingInviteId}
+                  updatingUserId={updatingUserId}
                   users={managedUsers}
                 />
               ) : activeSection === 'Kasa raporu' ? (

@@ -1,6 +1,7 @@
 export type AuthMode = 'login' | 'register'
 
 export type UserRole = 'member' | 'owner'
+export type UserStatus = 'active' | 'inactive'
 
 export type Appointment = {
   id: number
@@ -201,6 +202,7 @@ export type ManagedUser = {
   id: string
   invitedByEmail: string | null
   role: UserRole
+  status: UserStatus
 }
 
 export type ManagedInvite = {

@@ -33,7 +33,11 @@ type ProfileRow = {
   id: string
   invited_by: string | null
   role: 'member' | 'owner'
+  status: 'active' | 'inactive'
 }
+
+const hasMissingStatusColumnError = (message: string) =>
+  message.toLowerCase().includes('status') && message.toLowerCase().includes('profiles')
 
 const mapInvite = (invite: InviteRow, emailLookup: Map<string, string>) => ({
   codeHint: `****-${invite.code_last4}`,
@@ -56,7 +60,7 @@ export async function GET(request: Request) {
       await Promise.all([
         adminClient
           .from('profiles')
-          .select('id, email, role, invited_by, created_at')
+          .select('id, email, role, status, invited_by, created_at')
           .order('created_at', { ascending: false }),
         adminClient
           .from('invite_codes')
@@ -64,7 +68,23 @@ export async function GET(request: Request) {
           .order('created_at', { ascending: false }),
       ])
 
-    if (profilesError) {
+    let resolvedProfiles = profiles
+
+    if (profilesError && hasMissingStatusColumnError(profilesError.message)) {
+      const fallbackProfilesResult = await adminClient
+        .from('profiles')
+        .select('id, email, role, invited_by, created_at')
+        .order('created_at', { ascending: false })
+
+      if (fallbackProfilesResult.error) {
+        throw new ApiError(500, 'Kullanici listesi yuklenemedi.')
+      }
+
+      resolvedProfiles = (fallbackProfilesResult.data || []).map((profile) => ({
+        ...profile,
+        status: 'active' as const,
+      }))
+    } else if (profilesError) {
       throw new ApiError(500, 'Kullanici listesi yuklenemedi.')
     }
 
@@ -72,7 +92,7 @@ export async function GET(request: Request) {
       throw new ApiError(500, 'Davet kodlari yuklenemedi.')
     }
 
-    const typedProfiles = (profiles || []) as ProfileRow[]
+    const typedProfiles = (resolvedProfiles || []) as ProfileRow[]
     const typedInvites = (invites || []) as InviteRow[]
     const emailLookup = new Map<string, string>(
       typedProfiles.map((profile) => [profile.id, profile.email] as const)
@@ -86,6 +106,7 @@ export async function GET(request: Request) {
         id: profile.id,
         invitedByEmail: profile.invited_by ? emailLookup.get(profile.invited_by) || null : null,
         role: profile.role,
+        status: profile.status,
       })),
     })
   } catch (error) {

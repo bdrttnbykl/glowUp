@@ -11,6 +11,7 @@ type OwnerContext = AuthenticatedUserResult & {
   profile: {
     email: string
     role: 'member' | 'owner'
+    status: 'active' | 'inactive'
   }
 }
 
@@ -43,6 +44,9 @@ const getSupabaseEnv = () => {
 }
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase()
+
+const hasMissingStatusColumnError = (message: string) =>
+  message.toLowerCase().includes('status') && message.toLowerCase().includes('profiles')
 
 export const validateEmail = (value: string) => emailPattern.test(normalizeEmail(value))
 
@@ -123,11 +127,27 @@ export const getAuthenticatedUser = async (request: Request): Promise<Authentica
 export const requireOwner = async (request: Request): Promise<OwnerContext> => {
   const auth = await getAuthenticatedUser(request)
   const adminClient = createServiceRoleClient()
-  const { data: profile, error } = await adminClient
+  let { data: profile, error } = await adminClient
     .from('profiles')
-    .select('email, role')
+    .select('email, role, status')
     .eq('id', auth.user.id)
     .maybeSingle()
+
+  if (error && hasMissingStatusColumnError(error.message)) {
+    const fallbackResult = await adminClient
+      .from('profiles')
+      .select('email, role')
+      .eq('id', auth.user.id)
+      .maybeSingle()
+
+    profile = fallbackResult.data
+      ? {
+          ...fallbackResult.data,
+          status: 'active',
+        }
+      : null
+    error = fallbackResult.error
+  }
 
   if (error) {
     throw new ApiError(500, 'Profil rolu okunamadi.')
@@ -135,6 +155,10 @@ export const requireOwner = async (request: Request): Promise<OwnerContext> => {
 
   if (!profile || profile.role !== 'owner') {
     throw new ApiError(403, 'Bu islem sadece owner kullaniciya acik.')
+  }
+
+  if (profile.status !== 'active') {
+    throw new ApiError(403, 'Pasif owner hesap bu islemi yapamaz.')
   }
 
   return {
