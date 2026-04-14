@@ -205,6 +205,20 @@ export type ManagedUser = {
   status: UserStatus
 }
 
+export type ManagedUserRecordCounts = {
+  appointments: number
+  customers: number
+  invites: number
+  packageSales: number
+  products: number
+  total: number
+}
+
+export type ManagedUserDetail = ManagedUser & {
+  lastSignInAt: string | null
+  recordCounts: ManagedUserRecordCounts
+}
+
 export type ManagedInvite = {
   codeHint: string
   createdAt: string

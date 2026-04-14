@@ -8,6 +8,32 @@ export const normalizePhoneInput = (value: string) => {
   return value.replace(/\D/g, '').slice(0, 10)
 }
 
+export const normalizeWhatsAppPhone = (value: string | null) => {
+  if (!value) {
+    return null
+  }
+
+  const digits = value.replace(/[^\d+]/g, '').replace(/\D/g, '')
+
+  if (digits.length === 10) {
+    return `90${digits}`
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `90${digits.slice(1)}`
+  }
+
+  if (digits.length === 12 && digits.startsWith('90')) {
+    return digits
+  }
+
+  return null
+}
+
+export const createWhatsAppLink = (phone: string, text: string) => {
+  return `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`
+}
+
 export const getTodayDateInputValue = () => new Date().toISOString().split('T')[0]
 
 export const createDateFromIso = (isoDate: string) => {
@@ -71,6 +97,25 @@ export const getMonthGridDates = (isoDate: string) => {
 export const formatDisplayDate = (isoDate: string) => {
   const date = createDateFromIso(isoDate)
   return `${date.getDate()} ${monthLabels[date.getMonth()]} ${date.getFullYear()} ${weekDayLongLabels[(date.getDay() + 6) % 7]}`
+}
+
+export const formatDateLabelForReminder = (isoDate: string | null) => {
+  if (!isoDate) {
+    return 'yakinda'
+  }
+
+  const today = getTodayDateInputValue()
+  const tomorrow = addDays(today, 1)
+
+  if (isoDate === today) {
+    return 'bugun'
+  }
+
+  if (isoDate === tomorrow) {
+    return 'yarin'
+  }
+
+  return formatDisplayDate(isoDate)
 }
 
 export const formatWeekRangeLabel = (isoDate: string) => {
@@ -197,6 +242,31 @@ export const formatAppointmentOutcomeLabel = (
   }
 
   return `${attendanceStatus} / ${normalizeAppointmentServiceStatus(attendanceStatus, serviceStatus)}`
+}
+
+export const buildWhatsAppAppointmentReminderMessage = ({
+  businessName,
+  customerName,
+  date,
+  serviceName,
+  time,
+}: {
+  businessName: string
+  customerName: string | null
+  date: string | null
+  serviceName: string
+  time: string | null
+}) => {
+  const safeCustomerName = customerName?.trim() || 'Degerli musterimiz'
+  const safeServiceName = serviceName.trim() || 'randevu'
+  const safeDateLabel = formatDateLabelForReminder(date)
+  const safeTime = time ? ` saat ${time.slice(0, 5)}` : ''
+
+  return [
+    `Merhaba ${safeCustomerName},`,
+    `${businessName}'nde ${safeDateLabel}${safeTime} icin ${safeServiceName} randevunuz bulunuyor.`,
+    'Bu bir hatirlatma mesajidir. Iyi gunler dileriz.',
+  ].join('\n')
 }
 
 type DownloadPdfOptions = {

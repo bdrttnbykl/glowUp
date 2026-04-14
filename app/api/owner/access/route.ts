@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 import {
   ApiError,
   createInviteCode,
@@ -98,17 +100,24 @@ export async function GET(request: Request) {
       typedProfiles.map((profile) => [profile.id, profile.email] as const)
     )
 
-    return NextResponse.json({
-      invites: typedInvites.map((invite) => mapInvite(invite, emailLookup)),
-      users: typedProfiles.map((profile) => ({
-        createdAt: profile.created_at,
-        email: profile.email,
-        id: profile.id,
-        invitedByEmail: profile.invited_by ? emailLookup.get(profile.invited_by) || null : null,
-        role: profile.role,
-        status: profile.status,
-      })),
-    })
+    return NextResponse.json(
+      {
+        invites: typedInvites.map((invite) => mapInvite(invite, emailLookup)),
+        users: typedProfiles.map((profile) => ({
+          createdAt: profile.created_at,
+          email: profile.email,
+          id: profile.id,
+          invitedByEmail: profile.invited_by ? emailLookup.get(profile.invited_by) || null : null,
+          role: profile.role,
+          status: profile.status,
+        })),
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

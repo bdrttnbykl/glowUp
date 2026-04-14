@@ -9,6 +9,155 @@ type UpdateUserStatusPayload = {
 const hasMissingStatusColumnError = (message: string) =>
   message.toLowerCase().includes('status') && message.toLowerCase().includes('profiles')
 
+const isMissingRelationError = (message: string) => {
+  const normalized = message.toLowerCase()
+
+  return (
+    normalized.includes('relation') && normalized.includes('does not exist')
+  ) || normalized.includes('could not find the table')
+}
+
+const countRowsByUserId = async (
+  adminClient: ReturnType<typeof createServiceRoleClient>,
+  table: 'appointments' | 'customers' | 'package_sales' | 'products',
+  userId: string
+) => {
+  const { count, error } = await adminClient
+    .from(table)
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      return 0
+    }
+
+    throw new ApiError(500, 'Kullanici detay kayitlari okunamadi.')
+  }
+
+  return count || 0
+}
+
+export async function GET(
+  request: Request,
+  context: RouteContext<'/api/owner/access/users/[userId]'>
+) {
+  try {
+    await requireOwner(request)
+    const { userId } = await context.params
+
+    if (!userId) {
+      throw new ApiError(400, 'Kullanici bulunamadi.')
+    }
+
+    const adminClient = createServiceRoleClient()
+    let { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('id, email, role, status, invited_by, created_at')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (profileError && hasMissingStatusColumnError(profileError.message)) {
+      const fallbackResult = await adminClient
+        .from('profiles')
+        .select('id, email, role, invited_by, created_at')
+        .eq('id', userId)
+        .maybeSingle()
+
+      profile = fallbackResult.data
+        ? {
+            ...fallbackResult.data,
+            status: 'active',
+          }
+        : null
+      profileError = fallbackResult.error
+    }
+
+    if (profileError) {
+      throw new ApiError(500, 'Kullanici profili okunamadi.')
+    }
+
+    if (!profile) {
+      throw new ApiError(404, 'Kullanici bulunamadi.')
+    }
+
+    const [
+      invitedByResult,
+      authUserResult,
+      appointmentCount,
+      customerCount,
+      productCount,
+      packageSaleCount,
+      inviteCount,
+    ] = await Promise.all([
+      profile.invited_by
+        ? adminClient.from('profiles').select('email').eq('id', profile.invited_by).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      adminClient.auth.admin.getUserById(userId),
+      countRowsByUserId(adminClient, 'appointments', userId),
+      countRowsByUserId(adminClient, 'customers', userId),
+      countRowsByUserId(adminClient, 'products', userId),
+      countRowsByUserId(adminClient, 'package_sales', userId),
+      adminClient
+        .from('invite_codes')
+        .select('*', { count: 'exact', head: true })
+        .eq('created_by', userId),
+    ])
+
+    if (invitedByResult.error) {
+      throw new ApiError(500, 'Davet eden kullanici okunamadi.')
+    }
+
+    if (authUserResult.error) {
+      throw new ApiError(500, authUserResult.error.message || 'Son giris bilgisi okunamadi.')
+    }
+
+    if (inviteCount.error) {
+      throw new ApiError(500, 'Kullanicinin davet kayitlari okunamadi.')
+    }
+
+    const recordCounts = {
+      appointments: appointmentCount,
+      customers: customerCount,
+      invites: inviteCount.count || 0,
+      packageSales: packageSaleCount,
+      products: productCount,
+      total:
+        appointmentCount +
+        customerCount +
+        productCount +
+        packageSaleCount +
+        (inviteCount.count || 0),
+    }
+
+    return NextResponse.json(
+      {
+        detail: {
+          createdAt: profile.created_at,
+          email: profile.email,
+          id: profile.id,
+          invitedByEmail: invitedByResult.data?.email || null,
+          lastSignInAt: authUserResult.data.user?.last_sign_in_at || null,
+          recordCounts,
+          role: profile.role,
+          status: profile.status,
+        },
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    return NextResponse.json({ error: 'Kullanici detayi yuklenemedi.' }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   request: Request,
   context: RouteContext<'/api/owner/access/users/[userId]'>

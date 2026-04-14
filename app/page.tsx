@@ -49,6 +49,7 @@ import type {
   CustomerDraft,
   ManagedInvite,
   ManagedUser,
+  ManagedUserDetail,
   MessageChannel,
   MergedCustomer,
   PackageSale,
@@ -119,6 +120,17 @@ const normalizeInviteCodeInput = (value: string) =>
 
 const hasMissingProfileStatusError = (message: string) =>
   message.toLowerCase().includes('status') && message.toLowerCase().includes('profiles')
+
+const hasRecoveryParamsInUrl = () => {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const normalizedSearch = window.location.search.toLowerCase()
+  const normalizedHash = window.location.hash.toLowerCase()
+
+  return normalizedSearch.includes('type=recovery') || normalizedHash.includes('type=recovery')
+}
 
 const getReportPeriodStart = (period: CashReportPeriod, referenceDate = new Date()) => {
   const periodStart = new Date(referenceDate)
@@ -317,6 +329,8 @@ export default function Home() {
   const [inviteCode, setInviteCode] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false)
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(false)
   const [userId, setUserId] = useState('')
   const [userEmail, setUserEmail] = useState('')
   const [userRole, setUserRole] = useState<UserRole>('member')
@@ -327,10 +341,14 @@ export default function Home() {
   const [inviteEmailDraft, setInviteEmailDraft] = useState('')
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([])
   const [managedInvites, setManagedInvites] = useState<ManagedInvite[]>([])
+  const [activeManagedUserId, setActiveManagedUserId] = useState<string | null>(null)
+  const [activeManagedUserDetail, setActiveManagedUserDetail] = useState<ManagedUserDetail | null>(null)
+  const [isManagedUserDetailLoading, setIsManagedUserDetailLoading] = useState(false)
   const [lastCreatedInvite, setLastCreatedInvite] = useState<{
     code: string
     email: string
     expiresAt: string
+    id: number
   } | null>(null)
   const [appointmentDraft, setAppointmentDraft] = useState<AppointmentDraft>(
     defaultAppointmentDraft
@@ -638,16 +656,46 @@ export default function Home() {
     setIsProductHistoryModalOpen(false)
   }
 
-  const resetRegisterFlow = () => {
-    setInviteCode('')
+  const clearAuthCredentials = () => {
     setPassword('')
     setPasswordConfirm('')
+  }
+
+  const resetRegisterFlow = () => {
+    setInviteCode('')
+    clearAuthCredentials()
     setRegisterStep('verify-invite')
+  }
+
+  const closeForgotPasswordMode = () => {
+    setIsForgotPasswordMode(false)
+    clearAuthCredentials()
+  }
+
+  const openForgotPasswordMode = () => {
+    setMode('login')
+    setIsForgotPasswordMode(true)
+    setIsPasswordRecoveryMode(false)
+    resetRegisterFlow()
+    setMessage('')
+  }
+
+  const closePasswordRecoveryMode = () => {
+    setIsPasswordRecoveryMode(false)
+    setIsForgotPasswordMode(false)
+    clearAuthCredentials()
+
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
   }
 
   const resetAccessManagement = () => {
     setManagedUsers([])
     setManagedInvites([])
+    setActiveManagedUserId(null)
+    setActiveManagedUserDetail(null)
+    setIsManagedUserDetailLoading(false)
     setInviteEmailDraft('')
     setLastCreatedInvite(null)
     setDeletingUserId(null)
@@ -661,6 +709,8 @@ export default function Home() {
     setUserId('')
     setUserEmail('')
     setUserRole('member')
+    setIsForgotPasswordMode(false)
+    setIsPasswordRecoveryMode(false)
     setBrandName(defaultBrandName)
     setBusinessName(defaultBusinessName)
     setAccountBrandNameDraft(defaultBrandName)
@@ -746,6 +796,7 @@ export default function Home() {
     try {
       const accessToken = await getAccessToken()
       const response = await fetch('/api/owner/access', {
+        cache: 'no-store',
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -766,6 +817,44 @@ export default function Home() {
       setMessage(error instanceof Error ? error.message : 'Erisim verileri yuklenemedi.')
     } finally {
       setIsAccessLoading(false)
+    }
+  }
+
+  const closeManagedUserDetail = () => {
+    setActiveManagedUserId(null)
+    setActiveManagedUserDetail(null)
+    setIsManagedUserDetailLoading(false)
+  }
+
+  const loadManagedUserDetail = async (targetUser: ManagedUser) => {
+    setActiveManagedUserId(targetUser.id)
+    setActiveManagedUserDetail(null)
+    setIsManagedUserDetailLoading(true)
+
+    try {
+      const accessToken = await getAccessToken()
+      const response = await fetch(`/api/owner/access/users/${targetUser.id}`, {
+        cache: 'no-store',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      const payload = (await response.json()) as {
+        detail?: ManagedUserDetail
+        error?: string
+      }
+
+      if (!response.ok || !payload.detail) {
+        throw new Error(payload.error || 'Kullanici detayi yuklenemedi.')
+      }
+
+      setActiveManagedUserDetail(payload.detail)
+    } catch (error) {
+      setActiveManagedUserId(null)
+      setActiveManagedUserDetail(null)
+      setMessage(error instanceof Error ? error.message : 'Kullanici detayi yuklenemedi.')
+    } finally {
+      setIsManagedUserDetailLoading(false)
     }
   }
 
@@ -1031,9 +1120,89 @@ export default function Home() {
       await getPackageSales()
       await getStaffCompensationSettings()
       resetRegisterFlow()
+      closeForgotPasswordMode()
       setMessage('Kayit ve giris tamamlandi.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kayit tamamlanamadi.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleForgotPasswordRequest = async () => {
+    const trimmedEmail = email.trim().toLowerCase()
+
+    if (!trimmedEmail) {
+      setMessage('Sifirlama maili icin email gir.')
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const redirectTo =
+        typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo,
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      setMessage('Sifre yenileme linki email adresine gonderildi.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Sifirlama maili gonderilemedi.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePasswordRecoveryReset = async () => {
+    if (password.trim().length < 8) {
+      setMessage('Sifre en az 8 karakter olmali.')
+      return
+    }
+
+    if (password !== passwordConfirm) {
+      setMessage('Sifre tekrar alani eslesmiyor.')
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password,
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      await supabase.auth.signOut({ scope: 'local' })
+      clearAuthenticatedState()
+      closePasswordRecoveryMode()
+      setMode('login')
+      setMessage('Sifren guncellendi. Yeni sifren ile giris yapabilirsin.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Sifre guncellenemedi.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const cancelPasswordRecoveryFlow = async () => {
+    setLoading(true)
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+      clearAuthenticatedState()
+      closePasswordRecoveryMode()
+      setMode('login')
+      setMessage('')
     } finally {
       setLoading(false)
     }
@@ -1070,6 +1239,7 @@ export default function Home() {
     await getProducts()
     await getPackageSales()
     await getStaffCompensationSettings()
+    closeForgotPasswordMode()
     setMessage('Giris basarili.')
     setLoading(false)
   }
@@ -1159,6 +1329,7 @@ export default function Home() {
         code: payload.code,
         email: payload.invite.email,
         expiresAt: payload.invite.expiresAt,
+        id: payload.invite.id,
       })
       setInviteEmailDraft('')
       await loadAccessManagement()
@@ -1182,13 +1353,36 @@ export default function Home() {
         },
         method: 'DELETE',
       })
-      const payload = (await response.json()) as { error?: string }
+      const payload = (await response.json()) as {
+        error?: string
+        invite?: ManagedInvite
+      }
 
       if (!response.ok) {
         throw new Error(payload.error || 'Davet kodu iptal edilemedi.')
       }
 
+      setManagedInvites((current) =>
+        current.map((invite) => {
+          if (invite.id !== inviteId) {
+            return invite
+          }
+
+          if (!payload.invite) {
+            return {
+              ...invite,
+              status: 'revoked',
+            }
+          }
+
+          return {
+            ...invite,
+            ...payload.invite,
+          }
+        })
+      )
       await loadAccessManagement()
+      setLastCreatedInvite((current) => (current?.id === inviteId ? null : current))
       setMessage('Davet kodu iptal edildi.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Davet kodu iptal edilemedi.')
@@ -1224,6 +1418,8 @@ export default function Home() {
       }
 
       await loadAccessManagement()
+      setActiveManagedUserDetail((current) => (current?.id === targetUser.id ? null : current))
+      setActiveManagedUserId((current) => (current === targetUser.id ? null : current))
       setMessage(`${payload.email || targetUser.email} hesabi silindi.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kullanici silinemedi.')
@@ -1263,6 +1459,14 @@ export default function Home() {
       }
 
       await loadAccessManagement()
+      setActiveManagedUserDetail((current) =>
+        current?.id === targetUser.id
+          ? {
+              ...current,
+              status: payload.status || nextStatus,
+            }
+          : current
+      )
       setMessage(
         `${payload.email || targetUser.email} hesabi ${
           payload.status === 'inactive' ? 'pasife alindi.' : 'yeniden aktive edildi.'
@@ -2277,7 +2481,9 @@ export default function Home() {
         setPackageSales([])
         setStaffCompensationSettings([])
         setStaffCompensationDrafts({})
-        resetRegisterFlow()
+        setInviteCode('')
+        clearAuthCredentials()
+        setRegisterStep('verify-invite')
         resetAccessManagement()
         return
       }
@@ -2287,14 +2493,20 @@ export default function Home() {
     }
 
     const loadInitialUser = async () => {
-      await supabase.auth.signOut({ scope: 'local' })
-
       const { data, error } = await supabase.auth.getSession()
 
       if (error) {
         setMessage('Oturum kontrolu yapilamadi. Giris yapmayi tekrar dene.')
         applySession(null)
         return
+      }
+
+      if (data.session?.user && hasRecoveryParamsInUrl()) {
+        setIsPasswordRecoveryMode(true)
+        setMode('login')
+        setEmail(data.session.user.email || '')
+        clearAuthCredentials()
+        setMessage('Email dogrulandi. Yeni sifreni belirle.')
       }
 
       applySession(data.session)
@@ -2304,7 +2516,18 @@ export default function Home() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryMode(true)
+        setIsForgotPasswordMode(false)
+        setMode('login')
+        setEmail(session?.user.email || '')
+        clearAuthCredentials()
+        setMessage('Email dogrulandi. Yeni sifreni belirle.')
+      } else if (event === 'SIGNED_OUT') {
+        setIsPasswordRecoveryMode(false)
+      }
+
       applySession(session)
     })
 
@@ -2315,7 +2538,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || isPasswordRecoveryMode) {
       return
     }
 
@@ -2325,7 +2548,7 @@ export default function Home() {
     void loadProducts()
     void loadPackageSales()
     void loadStaffCompensationSettings()
-  }, [userId])
+  }, [isPasswordRecoveryMode, userId])
 
   useEffect(() => {
     if (!userId || userRole !== 'owner') {
@@ -2342,7 +2565,7 @@ export default function Home() {
     }
   }, [activeSection, userRole])
 
-  if (userEmail && !loggingOut) {
+  if (userEmail && !loggingOut && !isPasswordRecoveryMode) {
     const hasCustomCashRange = !!cashReportStartDate || !!cashReportEndDate
     const isWithinCashReportRange = (dateValue: string | null) => {
       if (!dateValue) {
@@ -3513,19 +3736,24 @@ export default function Home() {
                 />
               ) : activeSection === 'Kullanicilar' && userRole === 'owner' ? (
                 <AccessManagementPage
+                  activeUserDetail={activeManagedUserDetail}
+                  activeUserDetailId={activeManagedUserId}
                   currentUserId={userId}
                   deletingUserId={deletingUserId}
                   inviteEmail={inviteEmailDraft}
                   invites={managedInvites}
                   isCreatingInvite={isCreatingInvite}
                   isLoading={isAccessLoading}
+                  isUserDetailLoading={isManagedUserDetailLoading}
                   lastCreatedInvite={lastCreatedInvite}
                   message={message}
+                  onCloseUserDetail={closeManagedUserDetail}
                   onCreateInvite={() => void createInviteCode()}
                   onDeleteUser={(user) => void deleteManagedUser(user)}
                   onInviteEmailChange={setInviteEmailDraft}
                   onRefresh={() => void loadAccessManagement()}
                   onRevokeInvite={(inviteId) => void revokeInviteCode(inviteId)}
+                  onSelectUser={(user) => void loadManagedUserDetail(user)}
                   onUpdateUserStatus={(user, nextStatus) =>
                     void setManagedUserStatus(user, nextStatus)
                   }
@@ -3743,7 +3971,11 @@ export default function Home() {
           </p>
           <h1 className="text-4xl font-semibold tracking-[-0.04em]">Hos geldin</h1>
           <p className="mt-2 text-sm text-white/70">
-            {mode === 'login'
+            {isPasswordRecoveryMode
+              ? 'Email linki dogrulandi. Simdi yeni sifreni belirle'
+              : isForgotPasswordMode
+                ? 'Email adresini gir, sifre yenileme linki gonderelim'
+                : mode === 'login'
               ? 'Email ve sifren ile giris yap'
               : registerStep === 'verify-invite'
                 ? 'Email ve tek kullanimlik davet kodunu dogrula'
@@ -3751,50 +3983,58 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
-          <button
-            onClick={() => {
-              setMode('login')
-              resetRegisterFlow()
-              setMessage('')
-            }}
-            className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
-              mode === 'login'
-                ? 'bg-lime-300 text-slate-950'
-                : 'text-white/70 hover:bg-white/5'
-            }`}
-          >
-            Giris Yap
-          </button>
-          <button
-            onClick={() => {
-              setMode('register')
-              resetRegisterFlow()
-              setMessage('')
-            }}
-            className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
-              mode === 'register'
-                ? 'bg-lime-300 text-slate-950'
-                : 'text-white/70 hover:bg-white/5'
-            }`}
-          >
-            Kayit Ol
-          </button>
-        </div>
+        {!isPasswordRecoveryMode && (
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
+            <button
+              onClick={() => {
+                setMode('login')
+                closeForgotPasswordMode()
+                resetRegisterFlow()
+                setMessage('')
+              }}
+              className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                mode === 'login' && !isForgotPasswordMode
+                  ? 'bg-lime-300 text-slate-950'
+                  : 'text-white/70 hover:bg-white/5'
+              }`}
+            >
+              Giris Yap
+            </button>
+            <button
+              onClick={() => {
+                setMode('register')
+                closeForgotPasswordMode()
+                resetRegisterFlow()
+                setMessage('')
+              }}
+              className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                mode === 'register'
+                  ? 'bg-lime-300 text-slate-950'
+                  : 'text-white/70 hover:bg-white/5'
+              }`}
+            >
+              Kayit Ol
+            </button>
+          </div>
+        )}
 
         <div className="space-y-4">
           <input
             type="email"
-            placeholder="Email adresin"
+            placeholder={isForgotPasswordMode ? 'Kayitli email adresin' : 'Email adresin'}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            readOnly={mode === 'register' && registerStep === 'create-password'}
+            readOnly={
+              isPasswordRecoveryMode || (mode === 'register' && registerStep === 'create-password')
+            }
             className={`w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40 ${
-              mode === 'register' && registerStep === 'create-password' ? 'opacity-80' : ''
+              isPasswordRecoveryMode || (mode === 'register' && registerStep === 'create-password')
+                ? 'opacity-80'
+                : ''
             }`.trim()}
           />
 
-          {mode === 'register' && (
+          {mode === 'register' && !isForgotPasswordMode && !isPasswordRecoveryMode && (
             <input
               type="text"
               placeholder="Davet kodun"
@@ -3807,17 +4047,25 @@ export default function Home() {
             />
           )}
 
-          {(mode === 'login' || registerStep === 'create-password') && (
+          {((mode === 'login' && !isForgotPasswordMode) ||
+            registerStep === 'create-password' ||
+            isPasswordRecoveryMode) && (
             <input
               type="password"
-              placeholder={mode === 'login' ? 'Sifren' : 'Yeni sifren'}
+              placeholder={
+                isPasswordRecoveryMode
+                  ? 'Yeni sifren'
+                  : mode === 'login'
+                    ? 'Sifren'
+                    : 'Yeni sifren'
+              }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
             />
           )}
 
-          {mode === 'register' && registerStep === 'create-password' && (
+          {((mode === 'register' && registerStep === 'create-password') || isPasswordRecoveryMode) && (
             <input
               type="password"
               placeholder="Sifre tekrar"
@@ -3827,25 +4075,82 @@ export default function Home() {
             />
           )}
 
+          {isForgotPasswordMode && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+              Gonderilen linke tikladiginda bu ekrana donup yeni sifreni belirleyeceksin.
+            </div>
+          )}
+
           {mode === 'register' && registerStep === 'create-password' && (
             <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
               Davet kodu ve email eslesti. Bu hesap icin ilk sifreyi simdi olusturuyorsun.
             </div>
           )}
 
+          {isPasswordRecoveryMode && (
+            <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
+              Link gecerli. Yeni sifreni kaydedince guvenlik icin oturum kapatilacak.
+            </div>
+          )}
+
           <button
-            onClick={mode === 'login' ? handleLogin : handleRegister}
+            onClick={
+              isPasswordRecoveryMode
+                ? handlePasswordRecoveryReset
+                : isForgotPasswordMode
+                  ? handleForgotPasswordRequest
+                  : mode === 'login'
+                    ? handleLogin
+                    : handleRegister
+            }
             disabled={loading}
             className="w-full rounded-2xl bg-lime-300 px-4 py-3 font-medium text-slate-950 disabled:opacity-50"
           >
             {loading
               ? 'Bekle...'
-              : mode === 'login'
+              : isPasswordRecoveryMode
+                ? 'Sifreyi guncelle'
+                : isForgotPasswordMode
+                  ? 'Sifirlama linki gonder'
+                  : mode === 'login'
                 ? 'Giris Yap'
                 : registerStep === 'verify-invite'
                   ? 'Kodu dogrula'
                   : 'Hesap olustur'}
           </button>
+
+          {!isPasswordRecoveryMode && mode === 'login' && !isForgotPasswordMode && (
+            <button
+              type="button"
+              onClick={openForgotPasswordMode}
+              className="w-full text-sm text-white/70 underline underline-offset-4"
+            >
+              Sifremi unuttum
+            </button>
+          )}
+
+          {!isPasswordRecoveryMode && isForgotPasswordMode && (
+            <button
+              type="button"
+              onClick={() => {
+                closeForgotPasswordMode()
+                setMessage('')
+              }}
+              className="w-full text-sm text-white/70 underline underline-offset-4"
+            >
+              Giris ekranina don
+            </button>
+          )}
+
+          {isPasswordRecoveryMode && (
+            <button
+              type="button"
+              onClick={() => void cancelPasswordRecoveryFlow()}
+              className="w-full text-sm text-white/70 underline underline-offset-4"
+            >
+              Iptal et
+            </button>
+          )}
         </div>
 
         {message && (

@@ -10,12 +10,15 @@ import {
 } from '@/app/_home/components/dashboard-page-shell'
 import type { Appointment, AppointmentRow } from '@/app/_home/types'
 import {
+  buildWhatsAppAppointmentReminderMessage,
+  createWhatsAppLink,
   createDateFromIso,
   downloadPdfFile,
   formatAppointmentOutcomeLabel,
   formatDateIso,
   getTodayDateInputValue,
   isPastAppointment,
+  normalizeWhatsAppPhone,
 } from '@/app/_home/utils'
 
 type AppointmentPeriodFilter =
@@ -50,6 +53,8 @@ export function AppointmentsPage({
   )
   const [periodFilter, setPeriodFilter] = useState<AppointmentPeriodFilter>('Tum zamanlar')
   const [isPeriodPreviewOpen, setIsPeriodPreviewOpen] = useState(false)
+  const [whatsAppMessage, setWhatsAppMessage] = useState('')
+  const [activeWhatsAppLink, setActiveWhatsAppLink] = useState('')
   const todayIso = getTodayDateInputValue()
   const [customRangeStart, setCustomRangeStart] = useState(todayIso)
   const [customRangeEnd, setCustomRangeEnd] = useState(todayIso)
@@ -122,6 +127,37 @@ export function AppointmentsPage({
   })
   const formatShortDate = (isoDate: string) =>
     createDateFromIso(isoDate).toLocaleDateString('tr-TR')
+  const getWhatsAppReminderLink = (item: AppointmentRow) => {
+    const phone = normalizeWhatsAppPhone(item.phone)
+
+    if (!phone) {
+      return null
+    }
+
+    return createWhatsAppLink(
+      phone,
+      buildWhatsAppAppointmentReminderMessage({
+        businessName: 'GlowUp Guzellik Merkezi',
+        customerName: item.customer,
+        date: item.date,
+        serviceName: item.service,
+        time: item.time,
+      })
+    )
+  }
+  const openWhatsAppReminder = (item: AppointmentRow) => {
+    const whatsappLink = getWhatsAppReminderLink(item)
+
+    if (!whatsappLink) {
+      setWhatsAppMessage('Bu randevuda gecerli bir telefon numarasi yok.')
+      setActiveWhatsAppLink('')
+      return
+    }
+
+    setWhatsAppMessage('WhatsApp acilmazsa asagidaki hazir linki kullan.')
+    setActiveWhatsAppLink(whatsappLink)
+    window.open(whatsappLink, '_blank', 'noopener,noreferrer')
+  }
   const rangeSummary = selectedRange
     ? selectedRange.start === selectedRange.end
       ? formatShortDate(selectedRange.start)
@@ -342,11 +378,39 @@ export function AppointmentsPage({
               : `${appointmentsInPeriodPreview.length} randevuyu popupta gor`}
           </button>
         </div>
+
+        {activeWhatsAppLink ? (
+          <div className="mt-4 rounded-2xl border border-[#d8ebdc] bg-[#effaf2] p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1f8e3d]">
+              Hazir WhatsApp Linki
+            </div>
+            <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center">
+              <a
+                href={activeWhatsAppLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="break-all text-sm text-[#1f8e3d] underline underline-offset-4"
+              >
+                {activeWhatsAppLink}
+              </a>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(activeWhatsAppLink)
+                  setWhatsAppMessage('WhatsApp linki panoya kopyalandi.')
+                }}
+                className="rounded-2xl border border-[#b9d6c0] bg-white px-4 py-2 text-sm font-medium text-[#1f8e3d]"
+              >
+                Linki kopyala
+              </button>
+            </div>
+          </div>
+        ) : null}
       </DashboardSectionCard>
 
       <DashboardSectionCard className="overflow-hidden p-0">
         <div className="max-w-full overflow-x-auto">
-          <table className="min-w-[1400px] bg-white text-left">
+          <table className="min-w-[1520px] bg-white text-left">
             <thead className="border-b border-[#d7e0eb] bg-[#f6f9fd] text-[15px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 <th className="px-4 py-5 font-semibold">Musteri</th>
@@ -377,7 +441,10 @@ export function AppointmentsPage({
                   </td>
                 </tr>
               ) : (
-                filteredAppointments.map((item) => (
+                filteredAppointments.map((item) => {
+                  const whatsAppLink = getWhatsAppReminderLink(item)
+
+                  return (
                   <tr key={item.id} className="border-b border-slate-100 align-top">
                     <td className="px-4 py-5 font-medium text-slate-800">{item.customer || '-'}</td>
                     <td className="px-4 py-5">{item.phone || '-'}</td>
@@ -429,6 +496,25 @@ export function AppointmentsPage({
                         >
                           {item.closed_at ? 'Sonucu duzenle' : 'Sonuclandir'}
                         </button>
+                        {whatsAppLink ? (
+                          <a
+                            href={whatsAppLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setWhatsAppMessage('')}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-[#d8ebdc] bg-[#effaf2] px-4 py-3 text-[#1f8e3d]"
+                          >
+                            WhatsApp hatirlat
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openWhatsAppReminder(item)}
+                            className="rounded-xl border border-[#d8ebdc] bg-[#effaf2] px-4 py-3 text-[#1f8e3d]"
+                          >
+                            WhatsApp hatirlat
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => onDeleteNote(item.id)}
@@ -439,7 +525,8 @@ export function AppointmentsPage({
                       </div>
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -476,7 +563,10 @@ export function AppointmentsPage({
                 </div>
               ) : (
                 <div className="flex min-w-max gap-4">
-                  {appointmentsInPeriodPreview.map((item) => (
+                  {appointmentsInPeriodPreview.map((item) => {
+                    const whatsAppLink = getWhatsAppReminderLink(item)
+
+                    return (
                     <div
                       key={`period-preview-${item.id}`}
                       className="w-[320px] shrink-0 rounded-3xl border border-[#d9e2ef] bg-[#f8fbff] p-5"
@@ -510,9 +600,9 @@ export function AppointmentsPage({
                         <span className="rounded-full bg-white px-3 py-1 text-slate-500">
                           {item.status || 'Taslak'}
                         </span>
-                    <span className="rounded-full bg-white px-3 py-1 text-slate-500">
-                      {formatAppointmentOutcomeLabel(item.attendance_status, item.service_status)}
-                    </span>
+                        <span className="rounded-full bg-white px-3 py-1 text-slate-500">
+                          {formatAppointmentOutcomeLabel(item.attendance_status, item.service_status)}
+                        </span>
                       </div>
 
                       <div className="mt-5 flex gap-2">
@@ -526,6 +616,25 @@ export function AppointmentsPage({
                         >
                           Duzenle
                         </button>
+                        {whatsAppLink ? (
+                          <a
+                            href={whatsAppLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setWhatsAppMessage('')}
+                            className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-[#d8ebdc] bg-[#effaf2] px-4 py-3 text-sm font-medium text-[#1f8e3d]"
+                          >
+                            WhatsApp hatirlat
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openWhatsAppReminder(item)}
+                            className="rounded-2xl border border-[#d8ebdc] bg-[#effaf2] px-4 py-3 text-sm font-medium text-[#1f8e3d]"
+                          >
+                            WhatsApp hatirlat
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
@@ -540,7 +649,8 @@ export function AppointmentsPage({
                         </button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -548,7 +658,7 @@ export function AppointmentsPage({
         </div>
       ) : null}
 
-      <DashboardMessage message={message} />
+      <DashboardMessage message={whatsAppMessage || message} />
     </DashboardPageShell>
   )
 }

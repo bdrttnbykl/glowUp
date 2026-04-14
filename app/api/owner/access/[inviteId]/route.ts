@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server'
 
-import { ApiError, createServiceRoleClient, requireOwner } from '@/lib/supabase-server'
+import {
+  ApiError,
+  createServiceRoleClient,
+  getInviteStatus,
+  requireOwner,
+} from '@/lib/supabase-server'
 
 export async function DELETE(
   request: Request,
   context: RouteContext<'/api/owner/access/[inviteId]'>
 ) {
   try {
-    await requireOwner(request)
+    const owner = await requireOwner(request)
 
     const { inviteId } = await context.params
     const parsedInviteId = Number(inviteId)
@@ -19,7 +24,7 @@ export async function DELETE(
     const adminClient = createServiceRoleClient()
     const { data: invite, error: inviteError } = await adminClient
       .from('invite_codes')
-      .select('id, used_at, revoked_at')
+      .select('id, email, code_last4, created_by, expires_at, used_at, revoked_at, used_by_user_id, created_at')
       .eq('id', parsedInviteId)
       .maybeSingle()
 
@@ -36,21 +41,49 @@ export async function DELETE(
     }
 
     if (invite.revoked_at) {
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({
+        invite: {
+          codeHint: `****-${invite.code_last4}`,
+          createdAt: invite.created_at,
+          createdByEmail: owner.profile.email,
+          email: invite.email,
+          expiresAt: invite.expires_at,
+          id: parsedInviteId,
+          status: getInviteStatus(invite),
+          usedAt: invite.used_at,
+          usedByEmail: null,
+        },
+        ok: true,
+      })
     }
 
-    const { error: revokeError } = await adminClient
+    const { data: revokedInvite, error: revokeError } = await adminClient
       .from('invite_codes')
       .update({
         revoked_at: new Date().toISOString(),
       })
       .eq('id', parsedInviteId)
+      .select('id, email, code_last4, created_by, expires_at, used_at, revoked_at, used_by_user_id, created_at')
+      .single()
 
-    if (revokeError) {
+    if (revokeError || !revokedInvite) {
       throw new ApiError(500, 'Davet kodu iptal edilemedi.')
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      invite: {
+        codeHint: `****-${revokedInvite.code_last4}`,
+        createdAt: revokedInvite.created_at,
+        createdByEmail: owner.profile.email,
+        email: revokedInvite.email,
+        expiresAt: revokedInvite.expires_at,
+        id: revokedInvite.id,
+        status: getInviteStatus(revokedInvite),
+        usedAt: revokedInvite.used_at,
+        usedByEmail: null,
+      },
+      ok: true,
+    })
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
