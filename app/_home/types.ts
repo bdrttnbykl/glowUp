@@ -52,6 +52,14 @@ export type CustomerDraft = {
   phone: string
 }
 
+export type StaffMember = {
+  id: number
+  user_id: string
+  name: string
+  services: string[]
+  created_at: string
+}
+
 export type Product = {
   id: number
   product: string

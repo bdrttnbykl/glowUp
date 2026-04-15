@@ -1,4 +1,3 @@
-import { staffOptions } from '@/app/_home/constants'
 import type { PackageSaleRow, PackageSessionDraft } from '@/app/_home/types'
 
 type PackageSessionModalProps = {
@@ -8,6 +7,7 @@ type PackageSessionModalProps = {
   packageSale: PackageSaleRow | null
   onClose: () => void
   onDraftChange: (draft: PackageSessionDraft) => void
+  staffOptions: readonly string[]
   onSubmit: () => void
 }
 
@@ -18,6 +18,7 @@ export function PackageSessionModal({
   packageSale,
   onClose,
   onDraftChange,
+  staffOptions,
   onSubmit,
 }: PackageSessionModalProps) {
   if (!isOpen || !packageSale) {

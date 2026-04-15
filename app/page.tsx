@@ -9,8 +9,8 @@ import {
   defaultPackageSessionDraft,
   defaultProductDraft,
   monthLabels,
+  serviceOptions,
   sidebarItems,
-  staffOptions,
   weekDayLongLabels,
 } from '@/app/_home/constants'
 import { DashboardBreadcrumb } from '@/app/_home/components/dashboard-breadcrumb'
@@ -61,6 +61,7 @@ import type {
   PersonnelReportRow,
   Product,
   ProductDraft,
+  StaffMember,
   StaffCompensationSetting,
   UserRole,
   UserStatus,
@@ -360,9 +361,14 @@ export default function Home() {
   const [staffCompensationSettings, setStaffCompensationSettings] = useState<
     StaffCompensationSetting[]
   >([])
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [staffCompensationDrafts, setStaffCompensationDrafts] = useState<
     Record<string, StaffCompensationDraft>
   >({})
+  const [staffDraft, setStaffDraft] = useState('')
+  const [staffServiceDraft, setStaffServiceDraft] = useState<string[]>([])
+  const [editingStaffMemberId, setEditingStaffMemberId] = useState<number | null>(null)
+  const [isStaffCreatePanelOpen, setIsStaffCreatePanelOpen] = useState(false)
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(defaultCustomerDraft)
   const [editingCustomerId, setEditingCustomerId] = useState<number | null>(null)
   const [productDraft, setProductDraft] = useState<ProductDraft>(defaultProductDraft)
@@ -394,6 +400,8 @@ export default function Home() {
   const [messageSubject, setMessageSubject] = useState('')
   const [message, setMessage] = useState('')
   const [savingCompensationStaff, setSavingCompensationStaff] = useState<string | null>(null)
+  const [creatingStaff, setCreatingStaff] = useState(false)
+  const [deletingStaffId, setDeletingStaffId] = useState<number | null>(null)
   const [sendingMessage, setSendingMessage] = useState(false)
 
   const handlePlaceholderAction = (label: string) => {
@@ -406,9 +414,17 @@ export default function Home() {
     setMessage(`${label} ozelligi hazirlaniyor.`)
   }
 
+  const resetStaffEditor = () => {
+    setStaffDraft('')
+    setStaffServiceDraft([])
+    setEditingStaffMemberId(null)
+    setIsStaffCreatePanelOpen(false)
+  }
+
   const openAccountSettingsModal = () => {
     setAccountBrandNameDraft(brandName)
     setAccountBusinessNameDraft(businessName)
+    resetStaffEditor()
     setIsAccountSettingsModalOpen(true)
     setMessage('')
   }
@@ -416,7 +432,35 @@ export default function Home() {
   const closeAccountSettingsModal = () => {
     setAccountBrandNameDraft(brandName)
     setAccountBusinessNameDraft(businessName)
+    resetStaffEditor()
     setIsAccountSettingsModalOpen(false)
+  }
+
+  const toggleStaffCreatePanel = () => {
+    if (isStaffCreatePanelOpen) {
+      resetStaffEditor()
+      return
+    }
+
+    setStaffDraft('')
+    setStaffServiceDraft([])
+    setEditingStaffMemberId(null)
+    setIsStaffCreatePanelOpen(true)
+  }
+
+  const startEditingStaffMember = (staffId: number) => {
+    const targetStaff = staffMembers.find((item) => item.id === staffId)
+
+    if (!targetStaff) {
+      setMessage('Duzenlenecek personel bulunamadi.')
+      return
+    }
+
+    setEditingStaffMemberId(staffId)
+    setStaffDraft(targetStaff.name)
+    setStaffServiceDraft(targetStaff.services || [])
+    setIsStaffCreatePanelOpen(true)
+    setMessage('')
   }
 
   const handleSectionChange = (section: string) => {
@@ -1011,6 +1055,24 @@ export default function Home() {
     )
   }
 
+  const getStaffMembers = async () => {
+    const { data, error } = await supabase
+      .from('staff_members')
+      .select('*')
+      .order('name', { ascending: true })
+
+    if (error) {
+      setMessage(
+        error.message.includes('staff_members')
+          ? 'Personel migrationini calistir.'
+          : error.message
+      )
+      return
+    }
+
+    setStaffMembers((data as StaffMember[]) || [])
+  }
+
   const loadAppointments = useEffectEvent(async () => {
     await getAppointments()
   })
@@ -1029,6 +1091,10 @@ export default function Home() {
 
   const loadStaffCompensationSettings = useEffectEvent(async () => {
     await getStaffCompensationSettings()
+  })
+
+  const loadStaffMembers = useEffectEvent(async () => {
+    await getStaffMembers()
   })
 
   const verifyInviteForRegistration = async () => {
@@ -1238,6 +1304,7 @@ export default function Home() {
     await getCustomers()
     await getProducts()
     await getPackageSales()
+    await getStaffMembers()
     await getStaffCompensationSettings()
     closeForgotPasswordMode()
     setMessage('Giris basarili.')
@@ -1262,6 +1329,8 @@ export default function Home() {
     setCustomers([])
     setProducts([])
     setPackageSales([])
+    setStaffMembers([])
+    resetStaffEditor()
     setStaffCompensationSettings([])
     setStaffCompensationDrafts({})
     resetAccessManagement()
@@ -1282,6 +1351,7 @@ export default function Home() {
       await getCustomers()
       await getProducts()
       await getPackageSales()
+      await getStaffMembers()
       await getStaffCompensationSettings()
       setLoggingOut(false)
       setLoading(false)
@@ -1548,6 +1618,212 @@ export default function Home() {
     setIsAccountSettingsModalOpen(false)
     setMessage('Hesap ayarlari guncellendi.')
     setLoading(false)
+  }
+
+  const saveStaffMember = async () => {
+    const trimmedStaffName = staffDraft.trim()
+    const editingStaffMember =
+      editingStaffMemberId == null
+        ? null
+        : staffMembers.find((item) => item.id === editingStaffMemberId) || null
+
+    if (!trimmedStaffName) {
+      setMessage('Personel adini gir.')
+      return
+    }
+
+    if (staffServiceDraft.length === 0) {
+      setMessage('Personelin verdigi en az bir hizmet sec.')
+      return
+    }
+
+    setCreatingStaff(true)
+    setMessage('')
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        throw new Error('Aktif oturum bulunamadi. Tekrar giris yap.')
+      }
+
+      if (editingStaffMemberId != null && !editingStaffMember) {
+        throw new Error('Duzenlenecek personel bulunamadi.')
+      }
+
+      const normalizedServices = Array.from(new Set(staffServiceDraft))
+
+      const { error } =
+        editingStaffMember == null
+          ? await supabase.from('staff_members').insert([
+              {
+                user_id: user.id,
+                name: trimmedStaffName,
+                services: normalizedServices,
+              },
+            ])
+          : await supabase
+              .from('staff_members')
+              .update({
+                name: trimmedStaffName,
+                services: normalizedServices,
+              })
+              .eq('id', editingStaffMember.id)
+
+      if (error) {
+        const normalizedError = error.message.toLowerCase()
+
+        if (normalizedError.includes('duplicate') || normalizedError.includes('unique')) {
+          throw new Error('Bu personel zaten ekli.')
+        }
+
+        throw new Error(
+          error.message.includes('staff_members')
+            ? 'Personel migrationini calistir.'
+            : error.message
+        )
+      }
+
+      if (editingStaffMember && editingStaffMember.name !== trimmedStaffName) {
+        const { error: compensationUpdateError } = await supabase
+          .from('staff_compensation_settings')
+          .update({ staff_name: trimmedStaffName })
+          .eq('user_id', user.id)
+          .eq('staff_name', editingStaffMember.name)
+
+        if (
+          compensationUpdateError &&
+          !compensationUpdateError.message.includes('staff_compensation_settings')
+        ) {
+          throw new Error(compensationUpdateError.message)
+        }
+
+        setStaffCompensationSettings((current) =>
+          current.map((item) =>
+            item.staff_name === editingStaffMember.name
+              ? {
+                  ...item,
+                  staff_name: trimmedStaffName,
+                }
+              : item
+          )
+        )
+        setStaffCompensationDrafts((current) => {
+          if (!current[editingStaffMember.name]) {
+            return current
+          }
+
+          const nextDrafts = { ...current }
+          nextDrafts[trimmedStaffName] = current[editingStaffMember.name]
+          delete nextDrafts[editingStaffMember.name]
+          return nextDrafts
+        })
+        setAppointmentDraft((current) =>
+          current.staff === editingStaffMember.name
+            ? {
+                ...current,
+                staff: trimmedStaffName,
+              }
+            : current
+        )
+        setPackageSessionDraft((current) =>
+          current.staff === editingStaffMember.name
+            ? {
+                ...current,
+                staff: trimmedStaffName,
+              }
+            : current
+        )
+        setCalendarStaffFilter((current) =>
+          current === editingStaffMember.name ? trimmedStaffName : current
+        )
+        setActivePersonnelName((current) =>
+          current === editingStaffMember.name ? trimmedStaffName : current
+        )
+      }
+
+      resetStaffEditor()
+      await getStaffMembers()
+      setMessage(
+        editingStaffMember
+          ? `${trimmedStaffName} guncellendi.`
+          : `${trimmedStaffName} eklendi.`
+      )
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : editingStaffMember
+            ? 'Personel guncellenemedi.'
+            : 'Personel eklenemedi.'
+      )
+    } finally {
+      setCreatingStaff(false)
+    }
+  }
+
+  const toggleStaffServiceDraft = (serviceLabel: string) => {
+    setStaffServiceDraft((current) =>
+      current.includes(serviceLabel)
+        ? current.filter((item) => item !== serviceLabel)
+        : [...current, serviceLabel]
+    )
+  }
+
+  const removeStaffMember = async (staffId: number) => {
+    const targetStaff = staffMembers.find((item) => item.id === staffId)
+
+    if (!targetStaff) {
+      setMessage('Silinecek personel bulunamadi.')
+      return
+    }
+
+    const shouldDelete = window.confirm(
+      `${targetStaff.name} aktif listeden kaldirilsin mi? Eski kayitlar silinmeyecek.`
+    )
+
+    if (!shouldDelete) {
+      return
+    }
+
+    setDeletingStaffId(staffId)
+    setMessage('')
+
+    try {
+      const { error } = await supabase.from('staff_members').delete().eq('id', staffId)
+
+      if (error) {
+        throw new Error(
+          error.message.includes('staff_members')
+            ? 'Personel migrationini calistir.'
+            : error.message
+        )
+      }
+
+      if (appointmentDraft.staff === targetStaff.name) {
+        setAppointmentDraft((current) => ({
+          ...current,
+          staff: '',
+        }))
+      }
+
+      if (packageSessionDraft.staff === targetStaff.name) {
+        setPackageSessionDraft((current) => ({
+          ...current,
+          staff: '',
+        }))
+      }
+
+      await getStaffMembers()
+      setMessage(`${targetStaff.name} aktif listeden cikarildi.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Personel cikarilamadi.')
+    } finally {
+      setDeletingStaffId(null)
+    }
   }
 
   const handleCompensationDraftChange = (
@@ -2479,6 +2755,8 @@ export default function Home() {
         setCustomers([])
         setProducts([])
         setPackageSales([])
+        setStaffMembers([])
+        resetStaffEditor()
         setStaffCompensationSettings([])
         setStaffCompensationDrafts({})
         setInviteCode('')
@@ -2547,6 +2825,7 @@ export default function Home() {
     void loadCustomers()
     void loadProducts()
     void loadPackageSales()
+    void loadStaffMembers()
     void loadStaffCompensationSettings()
   }, [isPasswordRecoveryMode, userId])
 
@@ -2660,6 +2939,7 @@ export default function Home() {
         }),
       }
     })
+    const activeStaffOptions = staffMembers.map((item) => item.name)
     const calendarSlots = Array.from({ length: 12 }, (_, index) => {
       const hour = 13 + Math.floor((index + 1) / 2)
       const minute = index % 2 === 0 ? '00' : '30'
@@ -2852,9 +3132,20 @@ export default function Home() {
       },
       {}
     )
+    const allKnownStaffOptions = Array.from(
+      new Set(
+        [
+          ...activeStaffOptions,
+          ...appointmentRows.map((item) => item.staff?.trim() || '').filter(Boolean),
+          ...packageSales
+            .map((item) => packageSaleStaffLookup[item.id]?.trim() || '')
+            .filter(Boolean),
+        ].sort((left, right) => left.localeCompare(right, 'tr'))
+      )
+    )
     const todayIso = getTodayDateInputValue()
     const buildPersonnelRows = (isWithinPersonnelPeriod: (dateValue: string | null) => boolean) => {
-      const rowsByStaff = staffOptions.reduce<Record<string, PersonnelReportRow>>((result, staffName) => {
+      const rowsByStaff = activeStaffOptions.reduce<Record<string, PersonnelReportRow>>((result, staffName) => {
         result[staffName] = {
           staff: staffName,
           completedAppointments: 0,
@@ -3657,7 +3948,7 @@ export default function Home() {
         : sidebarItems
 
     return (
-      <main className="min-h-screen min-w-[1280px] bg-[#dfe3ec] text-slate-900">
+      <main className="min-h-screen min-w-[1280px] bg-[linear-gradient(180deg,#fcfbf7_0%,#f5f3ed_48%,#efeee7_100%)] text-slate-900">
         <div className="flex min-h-screen min-w-[1280px]">
           <DashboardSidebar
             activeSection={activeSection}
@@ -3704,7 +3995,7 @@ export default function Home() {
                   calendarRangeLabel={calendarRangeLabel}
                   calendarSlots={calendarSlots}
                   calendarStaffFilter={calendarStaffFilter}
-                  calendarStaffOptions={['Tum personeller', ...staffOptions]}
+                  calendarStaffOptions={['Tum personeller', ...allKnownStaffOptions]}
                   calendarView={calendarView}
                   currentMonthDate={currentMonthDate}
                   dailyAppointments={dailyAppointments}
@@ -3860,6 +4151,10 @@ export default function Home() {
                 loading={loading}
                 onClose={closeAppointmentModal}
                 onDraftChange={setAppointmentDraft}
+                staffMembers={staffMembers.map((item) => ({
+                  name: item.name,
+                  services: item.services || [],
+                }))}
                 onSubmit={saveAppointment}
               />
 
@@ -3912,6 +4207,7 @@ export default function Home() {
                 loading={loading}
                 onClose={closePackageSessionModal}
                 onDraftChange={setPackageSessionDraft}
+                staffOptions={activeStaffOptions}
                 onSubmit={addPackageSession}
                 packageSale={activePackageSale}
               />
@@ -3947,13 +4243,32 @@ export default function Home() {
               <AccountSettingsModal
                 brandName={accountBrandNameDraft}
                 businessName={accountBusinessNameDraft}
+                deletingStaffId={deletingStaffId}
+                editingStaffMemberId={editingStaffMemberId}
                 email={userEmail}
                 isOpen={isAccountSettingsModalOpen}
+                isCreatingStaff={creatingStaff}
+                isStaffCreatePanelOpen={isStaffCreatePanelOpen}
                 loading={loading}
                 onBrandNameChange={setAccountBrandNameDraft}
                 onBusinessNameChange={setAccountBusinessNameDraft}
+                onCancelStaffEdit={resetStaffEditor}
                 onClose={closeAccountSettingsModal}
+                onEditStaff={startEditingStaffMember}
+                onRemoveStaff={removeStaffMember}
+                onSaveStaff={saveStaffMember}
+                onStaffServiceToggle={toggleStaffServiceDraft}
+                onStaffDraftChange={setStaffDraft}
+                onToggleStaffCreatePanel={toggleStaffCreatePanel}
                 onSubmit={saveAccountSettings}
+                serviceOptions={serviceOptions.map((item) => item.label)}
+                staffDraft={staffDraft}
+                staffMembers={staffMembers.map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                  services: item.services || [],
+                }))}
+                staffServiceDraft={staffServiceDraft}
               />
             </div>
           </section>
@@ -3963,14 +4278,14 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#242738_0%,#5c3a3d_42%,#c68b61_100%)] px-4 text-white">
-      <div className="w-full max-w-md rounded-[30px] border border-white/10 bg-black/35 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#bcece6_0%,transparent_28%),linear-gradient(135deg,#103d47_0%,#1b7e84_46%,#ff8c66_100%)] px-4 text-[#20403d]">
+      <div className="w-full max-w-md rounded-[30px] border border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.9)_0%,rgba(248,253,252,0.86)_100%)] p-8 shadow-[0_30px_80px_rgba(17,73,79,0.22)] backdrop-blur-xl">
         <div className="mb-8 text-center">
-          <p className="mb-2 text-sm uppercase tracking-[0.3em] text-lime-300">
+          <p className="mb-2 text-sm uppercase tracking-[0.3em] text-[#15928a]">
             glowUp
           </p>
-          <h1 className="text-4xl font-semibold tracking-[-0.04em]">Hos geldin</h1>
-          <p className="mt-2 text-sm text-white/70">
+          <h1 className="text-4xl font-semibold tracking-[-0.04em] text-[#154c57]">Hos geldin</h1>
+          <p className="mt-2 text-sm text-[#6b817d]">
             {isPasswordRecoveryMode
               ? 'Email linki dogrulandi. Simdi yeni sifreni belirle'
               : isForgotPasswordMode
@@ -3984,7 +4299,7 @@ export default function Home() {
         </div>
 
         {!isPasswordRecoveryMode && (
-          <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-white/5 p-1">
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-[#edf7f5] p-1">
             <button
               onClick={() => {
                 setMode('login')
@@ -3994,8 +4309,8 @@ export default function Home() {
               }}
               className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
                 mode === 'login' && !isForgotPasswordMode
-                  ? 'bg-lime-300 text-slate-950'
-                  : 'text-white/70 hover:bg-white/5'
+                  ? 'bg-[linear-gradient(135deg,#15928a_0%,#46c4b4_100%)] text-white'
+                  : 'text-[#78908c] hover:bg-white'
               }`}
             >
               Giris Yap
@@ -4009,8 +4324,8 @@ export default function Home() {
               }}
               className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${
                 mode === 'register'
-                  ? 'bg-lime-300 text-slate-950'
-                  : 'text-white/70 hover:bg-white/5'
+                  ? 'bg-[linear-gradient(135deg,#ff8c66_0%,#ffb06a_100%)] text-white'
+                  : 'text-[#78908c] hover:bg-white'
               }`}
             >
               Kayit Ol
@@ -4027,7 +4342,7 @@ export default function Home() {
             readOnly={
               isPasswordRecoveryMode || (mode === 'register' && registerStep === 'create-password')
             }
-            className={`w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40 ${
+            className={`w-full rounded-2xl border border-[#d7e8e3] bg-white px-4 py-3 text-[#34504c] outline-none placeholder:text-[#97aba7] ${
               isPasswordRecoveryMode || (mode === 'register' && registerStep === 'create-password')
                 ? 'opacity-80'
                 : ''
@@ -4041,7 +4356,7 @@ export default function Home() {
               value={inviteCode}
               onChange={(event) => setInviteCode(normalizeInviteCodeInput(event.target.value))}
               readOnly={registerStep === 'create-password'}
-              className={`w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40 ${
+              className={`w-full rounded-2xl border border-[#d7e8e3] bg-white px-4 py-3 text-[#34504c] outline-none placeholder:text-[#97aba7] ${
                 registerStep === 'create-password' ? 'opacity-80' : ''
               }`.trim()}
             />
@@ -4061,7 +4376,7 @@ export default function Home() {
               }
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
+              className="w-full rounded-2xl border border-[#d7e8e3] bg-white px-4 py-3 text-[#34504c] outline-none placeholder:text-[#97aba7]"
             />
           )}
 
@@ -4071,24 +4386,24 @@ export default function Home() {
               placeholder="Sifre tekrar"
               value={passwordConfirm}
               onChange={(event) => setPasswordConfirm(event.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none placeholder:text-white/40"
+              className="w-full rounded-2xl border border-[#d7e8e3] bg-white px-4 py-3 text-[#34504c] outline-none placeholder:text-[#97aba7]"
             />
           )}
 
           {isForgotPasswordMode && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+            <div className="rounded-2xl border border-[#d7e8e3] bg-[#f4fbfa] px-4 py-3 text-sm text-[#64807b]">
               Gonderilen linke tikladiginda bu ekrana donup yeni sifreni belirleyeceksin.
             </div>
           )}
 
           {mode === 'register' && registerStep === 'create-password' && (
-            <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
+            <div className="rounded-2xl border border-[#ffd4c5] bg-[#fff4ef] px-4 py-3 text-sm text-[#c45a3c]">
               Davet kodu ve email eslesti. Bu hesap icin ilk sifreyi simdi olusturuyorsun.
             </div>
           )}
 
           {isPasswordRecoveryMode && (
-            <div className="rounded-2xl border border-lime-300/20 bg-lime-300/10 px-4 py-3 text-sm text-lime-100">
+            <div className="rounded-2xl border border-[#ffd4c5] bg-[#fff4ef] px-4 py-3 text-sm text-[#c45a3c]">
               Link gecerli. Yeni sifreni kaydedince guvenlik icin oturum kapatilacak.
             </div>
           )}
@@ -4104,7 +4419,7 @@ export default function Home() {
                     : handleRegister
             }
             disabled={loading}
-            className="w-full rounded-2xl bg-lime-300 px-4 py-3 font-medium text-slate-950 disabled:opacity-50"
+            className="w-full rounded-2xl bg-[linear-gradient(135deg,#15928a_0%,#46c4b4_100%)] px-4 py-3 font-medium text-white shadow-[0_12px_24px_rgba(21,146,138,0.2)] disabled:opacity-50"
           >
             {loading
               ? 'Bekle...'
@@ -4123,7 +4438,7 @@ export default function Home() {
             <button
               type="button"
               onClick={openForgotPasswordMode}
-              className="w-full text-sm text-white/70 underline underline-offset-4"
+              className="w-full text-sm text-[#6b817d] underline underline-offset-4"
             >
               Sifremi unuttum
             </button>
@@ -4136,7 +4451,7 @@ export default function Home() {
                 closeForgotPasswordMode()
                 setMessage('')
               }}
-              className="w-full text-sm text-white/70 underline underline-offset-4"
+              className="w-full text-sm text-[#6b817d] underline underline-offset-4"
             >
               Giris ekranina don
             </button>
@@ -4146,7 +4461,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => void cancelPasswordRecoveryFlow()}
-              className="w-full text-sm text-white/70 underline underline-offset-4"
+              className="w-full text-sm text-[#6b817d] underline underline-offset-4"
             >
               Iptal et
             </button>
@@ -4154,7 +4469,7 @@ export default function Home() {
         </div>
 
         {message && (
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80">
+          <div className="mt-5 rounded-2xl border border-[#d7e8e3] bg-[#f4fbfa] px-4 py-3 text-sm text-[#5e7470]">
             {message}
           </div>
         )}

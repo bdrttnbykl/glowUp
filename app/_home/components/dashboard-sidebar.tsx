@@ -39,9 +39,9 @@ export function DashboardSidebar({
   }
 
   return (
-    <aside className="group fixed left-0 top-0 z-30 flex h-dvh w-[74px] flex-col overflow-y-scroll overflow-x-hidden overscroll-contain bg-[linear-gradient(180deg,#474958_0%,#4f4754_28%,#8b5e4b_68%,#3c2f2d_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px]">
+    <aside className="group fixed left-0 top-0 z-30 flex h-dvh w-[74px] flex-col overflow-y-scroll overflow-x-hidden overscroll-contain bg-[linear-gradient(180deg,#103d47_0%,#14606c_28%,#1c8a87_66%,#ff8c66_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px]">
       <div className="relative px-3 py-5">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,#f0a36c33_0%,transparent_40%),linear-gradient(180deg,transparent_0%,rgba(26,18,20,0.22)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#9ce7df40_0%,transparent_30%),radial-gradient(circle_at_bottom,#ffd0bd30_0%,transparent_24%),linear-gradient(180deg,transparent_0%,rgba(8,34,42,0.16)_100%)]" />
 
         <div className="relative flex min-h-full flex-col items-center">
           <div className="mb-8 flex w-full items-center justify-center overflow-hidden">
@@ -72,7 +72,7 @@ export function DashboardSidebar({
                       onClick={onToggleReportMenu}
                       className={`flex h-12 w-full items-center transition ${
                         active || isReportMenuOpen
-                          ? 'bg-[#afcb8f] text-slate-700'
+                          ? 'bg-[#f7fffd] text-[#14726d] shadow-[0_8px_20px_rgba(12,71,75,0.18)]'
                           : 'text-white/95 hover:bg-white/10'
                       }`}
                       >
@@ -98,7 +98,7 @@ export function DashboardSidebar({
                             key={reportItem.label}
                             type="button"
                             onClick={() => handleReportSectionSelect(reportItem.label)}
-                            className="flex w-full items-center rounded-xl px-3 py-3 text-left text-white/95 transition hover:bg-white/10"
+                            className="flex w-full items-center rounded-xl px-3 py-3 text-left text-white/95 transition hover:bg-white/14"
                           >
                             <span className="text-[15px]">{reportItem.label}</span>
                             <span className="ml-auto">
@@ -120,7 +120,7 @@ export function DashboardSidebar({
                   onClick={() => handleSectionSelect(item.label)}
                   className={`flex h-12 w-full items-center rounded-2xl transition ${
                     active
-                      ? 'bg-[#afcb8f] text-slate-700'
+                      ? 'bg-[#f7fffd] text-[#14726d] shadow-[0_8px_20px_rgba(12,71,75,0.18)]'
                       : 'text-white/95 hover:bg-white/10'
                   }`}
                 >
@@ -139,7 +139,7 @@ export function DashboardSidebar({
               onClick={onLogout}
               disabled={loading}
               title="Cikis"
-              className="mt-2 flex h-12 w-full items-center rounded-2xl bg-white/10 transition hover:bg-white/15 disabled:opacity-50"
+              className="mt-2 flex h-12 w-full items-center rounded-2xl bg-white/18 transition hover:bg-white/24 disabled:opacity-50"
             >
               <span className="flex h-12 w-12 shrink-0 items-center justify-center text-base">
                 {loading ? '...' : 'X'}
@@ -152,9 +152,9 @@ export function DashboardSidebar({
         </div>
       </div>
 
-      <div className="border-t border-white/10 bg-black/35 px-2 py-4 backdrop-blur-sm">
+      <div className="border-t border-white/20 bg-white/10 px-2 py-4 backdrop-blur-sm">
         <div className="flex items-center justify-center gap-3 overflow-hidden group-hover:justify-start">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#62b0ff] text-sm font-semibold text-slate-950">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f7fffd] text-sm font-semibold text-[#14726d]">
             10
           </div>
           <div className="translate-x-2 whitespace-nowrap text-sm opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">

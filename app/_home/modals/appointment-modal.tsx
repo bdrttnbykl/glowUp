@@ -1,5 +1,5 @@
-import { getStaffOptionsForService, serviceOptions } from '@/app/_home/constants'
-import type { AppointmentDraft } from '@/app/_home/types'
+import { serviceOptions } from '@/app/_home/constants'
+import type { AppointmentDraft, StaffMember } from '@/app/_home/types'
 import { getTodayDateInputValue, normalizePhoneInput } from '@/app/_home/utils'
 
 type AppointmentModalProps = {
@@ -9,6 +9,7 @@ type AppointmentModalProps = {
   loading: boolean
   onClose: () => void
   onDraftChange: (draft: AppointmentDraft) => void
+  staffMembers: readonly Pick<StaffMember, 'name' | 'services'>[]
   onSubmit: () => void
 }
 
@@ -19,13 +20,18 @@ export function AppointmentModal({
   loading,
   onClose,
   onDraftChange,
+  staffMembers,
   onSubmit,
 }: AppointmentModalProps) {
   if (!isOpen) {
     return null
   }
 
-  const availableStaffOptions = getStaffOptionsForService(draft.service)
+  const availableStaffOptions = draft.service
+    ? staffMembers
+        .filter((staffMember) => staffMember.services.includes(draft.service))
+        .map((staffMember) => staffMember.name)
+    : []
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-8">
@@ -75,7 +81,9 @@ export function AppointmentModal({
               const selectedService = serviceOptions.find(
                 (service) => service.label === selectedServiceLabel
               )
-              const matchingStaffOptions = getStaffOptionsForService(selectedServiceLabel)
+              const matchingStaffOptions = staffMembers
+                .filter((staffMember) => staffMember.services.includes(selectedServiceLabel))
+                .map((staffMember) => staffMember.name)
 
               onDraftChange({
                 ...draft,

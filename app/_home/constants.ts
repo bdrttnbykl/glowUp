@@ -78,32 +78,6 @@ export const packageSessionTypeOptions = [
   'El Bakimi',
 ]
 
-export const staffOptions = [
-  'Cagdas Akkaya',
-  'Sengul Sener',
-  'Leyla Yusufoglu',
-  'Kazim Cikit',
-]
-
-// Temporary service-personnel matching until this is managed from an admin panel.
-export const serviceStaffOptionMap: Record<string, string[]> = {
-  'Ayak Bakimi': ['Cagdas Akkaya', 'Sengul Sener'],
-  'El Bakimi': ['Leyla Yusufoglu', 'Kazim Cikit'],
-  Manikur: ['Leyla Yusufoglu', 'Sengul Sener'],
-  Pedikur: ['Cagdas Akkaya', 'Kazim Cikit'],
-  'Kalici Oje': ['Leyla Yusufoglu', 'Sengul Sener', 'Kazim Cikit'],
-  'Nail Art': ['Leyla Yusufoglu', 'Kazim Cikit'],
-  'Cilt Bakimi': ['Cagdas Akkaya', 'Sengul Sener'],
-}
-
-export const getStaffOptionsForService = (serviceLabel: string) => {
-  if (!serviceLabel) {
-    return []
-  }
-
-  return serviceStaffOptionMap[serviceLabel] || staffOptions
-}
-
 export const sidebarItems = [
   { label: 'Ozet', icon: 'home' },
   { label: 'Randevu takvimi', icon: 'calendar' },
