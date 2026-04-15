@@ -48,7 +48,7 @@ export function DashboardPageHero({
       <div className="flex flex-col gap-6 px-6 py-6 xl:flex-row xl:items-start xl:justify-between xl:px-7">
         <div className="max-w-3xl">
           <span className="inline-flex rounded-full border border-[#bfe4de] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#15928a]">
-            Dashboard
+            Panel
           </span>
           <h1 className="mt-4 text-4xl font-light tracking-[-0.05em] text-[#154c57] xl:text-5xl">
             {title}

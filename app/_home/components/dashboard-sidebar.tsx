@@ -30,138 +30,113 @@ export function DashboardSidebar({
   onSelectSection,
   onToggleReportMenu,
 }: DashboardSidebarProps) {
-  const handleSectionSelect = (section: string) => {
-    onSelectSection(section)
-  }
-
-  const handleReportSectionSelect = (section: string) => {
-    onSelectReportSection(section)
-  }
+  const isActiveReportSection = reportSidebarItems.some((item) => item.label === activeSection)
 
   return (
-    <aside className="group fixed left-0 top-0 z-30 flex h-dvh w-[74px] flex-col overflow-y-scroll overflow-x-hidden overscroll-contain bg-[linear-gradient(180deg,#103d47_0%,#14606c_28%,#1c8a87_66%,#ff8c66_100%)] text-white transition-[width] duration-300 ease-out hover:w-[300px]">
-      <div className="relative px-3 py-5">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#9ce7df40_0%,transparent_30%),radial-gradient(circle_at_bottom,#ffd0bd30_0%,transparent_24%),linear-gradient(180deg,transparent_0%,rgba(8,34,42,0.16)_100%)]" />
-
-        <div className="relative flex min-h-full flex-col items-center">
-          <div className="mb-8 flex w-full items-center justify-center overflow-hidden">
-            <div className="flex h-12 w-[56px] shrink-0 items-center justify-center transition-[width] duration-300 ease-out group-hover:w-[146px]">
-              <Image
-                src={salonAppyLogo}
-                alt="glowup logo"
-                className="h-auto w-[46px] object-contain drop-shadow-[0_12px_25px_rgba(0,0,0,0.25)] transition-[width] duration-300 ease-out group-hover:w-[132px]"
-                priority
-              />
-            </div>
+    <header className="sticky top-0 z-40 border-b border-[#2d6ea6] bg-[linear-gradient(180deg,#2d77b9_0%,#3f8ac8_100%)] text-white shadow-[0_10px_24px_rgba(27,71,112,0.18)]">
+      <div className="grid min-h-[72px] grid-cols-[auto_1fr_auto] items-center gap-6 px-6">
+        <div className="flex items-center gap-4">
+          <div className="rounded-md bg-[#224f80] px-5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+            <Image
+              src={salonAppyLogo}
+              alt="glowup logo"
+              className="h-auto w-[120px] object-contain brightness-[2.8] saturate-0"
+              priority
+            />
           </div>
+        </div>
 
-          <nav className="flex w-full flex-col gap-4 pr-1">
-            {items.map((item) => {
-              const active = item.label === activeSection
-              const isReportsItem = item.label === 'Raporlar'
+        <nav className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto">
+          {items.map((item) => {
+            const active = item.label === activeSection
+            const isReportsItem = item.label === 'Raporlar'
 
-              if (isReportsItem) {
-                return (
-                  <div
-                    key={item.label}
-                    className="overflow-hidden rounded-2xl bg-white/8 transition group-hover:bg-white/10"
-                  >
-                    <button
-                      type="button"
-                      title={item.label}
-                      onClick={onToggleReportMenu}
-                      className={`flex h-12 w-full items-center transition ${
-                        active || isReportMenuOpen
-                          ? 'bg-[#f7fffd] text-[#14726d] shadow-[0_8px_20px_rgba(12,71,75,0.18)]'
-                          : 'text-white/95 hover:bg-white/10'
-                      }`}
-                      >
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center">
-                          <SidebarIcon name={item.icon} />
-                        </span>
-                        <span className="translate-x-2 whitespace-nowrap text-left text-[17px] opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
-                          {item.label}
-                        </span>
-                        <span
-                          className={`ml-auto mr-4 text-lg transition ${
-                            isReportMenuOpen ? 'block' : 'hidden group-hover:block'
-                          }`}
-                        >
-                          {isReportMenuOpen ? '^' : 'v'}
-                        </span>
-                    </button>
-
-                    {isReportMenuOpen && (
-                      <div className="block space-y-1 bg-black/12 px-3 py-3">
-                        {reportSidebarItems.map((reportItem) => (
-                          <button
-                            key={reportItem.label}
-                            type="button"
-                            onClick={() => handleReportSectionSelect(reportItem.label)}
-                            className="flex w-full items-center rounded-xl px-3 py-3 text-left text-white/95 transition hover:bg-white/14"
-                          >
-                            <span className="text-[15px]">{reportItem.label}</span>
-                            <span className="ml-auto">
-                              <SidebarIcon name={reportItem.icon} />
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              }
-
+            if (isReportsItem) {
               return (
                 <button
                   type="button"
                   key={item.label}
-                  title={item.label}
-                  onClick={() => handleSectionSelect(item.label)}
-                  className={`flex h-12 w-full items-center rounded-2xl transition ${
-                    active
-                      ? 'bg-[#f7fffd] text-[#14726d] shadow-[0_8px_20px_rgba(12,71,75,0.18)]'
-                      : 'text-white/95 hover:bg-white/10'
+                  onClick={onToggleReportMenu}
+                  className={`flex items-center gap-2 rounded-md px-4 py-3 text-sm font-semibold transition ${
+                    active || isReportMenuOpen
+                      ? 'bg-[#2d6ea6] text-white'
+                      : 'text-white/90 hover:bg-white/12'
                   }`}
                 >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center">
-                    <SidebarIcon name={item.icon} />
+                  <span>{item.label}</span>
+                  <span className="text-xs">{isReportMenuOpen ? '▲' : '▼'}</span>
+                </button>
+              )
+            }
+
+            return (
+              <button
+                type="button"
+                key={item.label}
+                onClick={() => onSelectSection(item.label)}
+                className={`rounded-md px-4 py-3 text-sm font-semibold transition ${
+                  active ? 'bg-[#2d6ea6] text-white' : 'text-white/90 hover:bg-white/12'
+                }`}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-white/90 transition hover:bg-white/12"
+            title="Hizli ekle"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-white/90 transition hover:bg-white/12"
+            title="Ara"
+          >
+            <span className="text-sm">⌕</span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={loading}
+            className="rounded-md border border-white/18 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/16 disabled:opacity-50"
+          >
+            {loading ? 'Cikiliyor...' : 'Cikis'}
+          </button>
+        </div>
+      </div>
+
+      {(isReportMenuOpen || isActiveReportSection) && (
+        <div className="border-t border-[#5a98d0] bg-[#f8fbfe] px-6 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
+          <div className="flex flex-wrap items-center gap-2">
+            {reportSidebarItems.map((reportItem) => {
+              const active = reportItem.label === activeSection
+
+              return (
+                <button
+                  key={reportItem.label}
+                  type="button"
+                  onClick={() => onSelectReportSection(reportItem.label)}
+                  className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition ${
+                    active
+                      ? 'border-[#3f8ac8] bg-[#3f8ac8] text-white shadow-sm'
+                      : 'border-[#d7e4f1] bg-white text-[#5b6f85] hover:bg-[#f3f8fd]'
+                  }`}
+                >
+                  <span className={active ? 'text-white' : 'text-[#3f8ac8]'}>
+                    <SidebarIcon name={reportItem.icon} />
                   </span>
-                  <span className="translate-x-2 whitespace-nowrap text-left text-[17px] opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
-                    {item.label}
-                  </span>
+                  <span>{reportItem.label}</span>
                 </button>
               )
             })}
-
-            <button
-              type="button"
-              onClick={onLogout}
-              disabled={loading}
-              title="Cikis"
-              className="mt-2 flex h-12 w-full items-center rounded-2xl bg-white/18 transition hover:bg-white/24 disabled:opacity-50"
-            >
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center text-base">
-                {loading ? '...' : 'X'}
-              </span>
-              <span className="translate-x-2 whitespace-nowrap text-sm opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
-                Cikis
-              </span>
-            </button>
-          </nav>
-        </div>
-      </div>
-
-      <div className="border-t border-white/20 bg-white/10 px-2 py-4 backdrop-blur-sm">
-        <div className="flex items-center justify-center gap-3 overflow-hidden group-hover:justify-start">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f7fffd] text-sm font-semibold text-[#14726d]">
-            10
-          </div>
-          <div className="translate-x-2 whitespace-nowrap text-sm opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100">
-            10 C Bulutlu
           </div>
         </div>
-      </div>
-    </aside>
+      )}
+    </header>
   )
 }

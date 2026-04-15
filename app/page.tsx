@@ -3948,38 +3948,37 @@ export default function Home() {
         : sidebarItems
 
     return (
-      <main className="min-h-screen min-w-[1280px] bg-[linear-gradient(180deg,#fcfbf7_0%,#f5f3ed_48%,#efeee7_100%)] text-slate-900">
-        <div className="flex min-h-screen min-w-[1280px]">
-          <DashboardSidebar
-            activeSection={activeSection}
-            isReportMenuOpen={isReportMenuOpen}
-            items={dashboardSidebarItems}
-            loading={loading}
-            onLogout={handleLogout}
-            onSelectReportSection={handleReportSectionChange}
-            onSelectSection={handleSectionChange}
-            onToggleReportMenu={handleReportMenuToggle}
+      <main className="min-h-screen min-w-[1280px] bg-[linear-gradient(180deg,#f7f9fc_0%,#eef3f8_54%,#e8eef5_100%)] text-slate-900">
+        <DashboardSidebar
+          activeSection={activeSection}
+          isReportMenuOpen={isReportMenuOpen}
+          items={dashboardSidebarItems}
+          loading={loading}
+          onLogout={handleLogout}
+          onSelectReportSection={handleReportSectionChange}
+          onSelectSection={handleSectionChange}
+          onToggleReportMenu={handleReportMenuToggle}
+        />
+
+        <section className="min-w-0 overflow-x-hidden">
+          <DashboardHeader
+            brandName={brandName}
+            businessName={businessName}
+            isQuickActionsOpen={isQuickActionsOpen}
+            onOpenAppointmentModal={openAppointmentModal}
+            onOpenAccountSettings={openAccountSettingsModal}
+            onOpenCustomerModal={openCustomerModal}
+            onOpenPackageSaleModal={openPackageSaleModal}
+            onOpenProductModal={openProductModal}
+            onPlaceholderAction={handlePlaceholderAction}
+            onQuickActionSectionSelect={handleQuickActionSectionSelect}
+            onToggleQuickActions={() => setIsQuickActionsOpen((current) => !current)}
+            userEmail={userEmail}
           />
 
-          <section className="min-w-0 flex-1 overflow-x-hidden pl-[74px]">
-            <DashboardHeader
-              brandName={brandName}
-              businessName={businessName}
-              isQuickActionsOpen={isQuickActionsOpen}
-              onOpenAppointmentModal={openAppointmentModal}
-              onOpenAccountSettings={openAccountSettingsModal}
-              onOpenCustomerModal={openCustomerModal}
-              onOpenPackageSaleModal={openPackageSaleModal}
-              onOpenProductModal={openProductModal}
-              onPlaceholderAction={handlePlaceholderAction}
-              onQuickActionSectionSelect={handleQuickActionSectionSelect}
-              onToggleQuickActions={() => setIsQuickActionsOpen((current) => !current)}
-              userEmail={userEmail}
-            />
+          <DashboardBreadcrumb activeSection={activeSection} />
 
-            <DashboardBreadcrumb activeSection={activeSection} />
-
-            <div className="px-4 py-5 md:px-6">
+          <div className="px-5 py-6 md:px-6">
               {activeSection === 'Ozet' ? (
                 <OverviewPage
                   message={message}
@@ -4087,6 +4086,10 @@ export default function Home() {
                   rangeEndDate={personnelReportEndDate}
                   rangeStartDate={personnelReportStartDate}
                   rows={personnelCompensationRows as readonly PersonnelCompensationRow[]}
+                  staffMembers={staffMembers.map((item) => ({
+                    name: item.name,
+                    services: item.services || [],
+                  }))}
                 />
               ) : activeSection === 'Satis raporlari' ? (
                 <SalesReportPage
@@ -4270,9 +4273,8 @@ export default function Home() {
                 }))}
                 staffServiceDraft={staffServiceDraft}
               />
-            </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </main>
     )
   }
